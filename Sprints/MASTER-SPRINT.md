@@ -37,7 +37,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
-| - | - | No active sprints | - | - |
+| main | [Sprint-G-001](./Global/Sprint-G-001/SPRINT-PLAN.md) | Planned | - | 2026-01-10 |
 
 ---
 
@@ -45,8 +45,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Active Sprints | 0 |
-| Sprints This Week | 0 |
+| Total Active Sprints | 1 |
+| Sprints This Week | 1 |
 | Pending Merges | 0 |
 
 > **Note**: Per-branch metrics (deadlock counter, session state) are stored in `.sprint-state.local`
@@ -56,13 +56,14 @@
 ## Sprint Queue (Prioritized)
 
 ### Priority 1 (Current)
-- No active sprints
+- **Sprint-G-001**: Project scaffolding, Playwright setup, TypeScript config
 
 ### Priority 2 (Next)
-- No queued sprints
+- Sprint-G-002: Auchan.pt login automation
+- Sprint-CB-R-001: Research Auchan.pt order history UI
 
 ### Backlog
-- No backlog items
+- See [SPRINT-PLANNING.md](./SPRINT-PLANNING.md) for full 27-sprint roadmap
 
 ### Blocked
 - No blocked sprints
@@ -123,9 +124,11 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 
 ## Notes for Next Session
 
-- Sprint Management initialized (v2.0.0)
-- Branch-based sprint naming enabled
-- Ready to create first sprint with `/sprint-new`
+- Sprint Management initialized (v2.1.0)
+- SPRINT-PLANNING.md created with 27-sprint roadmap across 3 phases
+- 7 modules defined: Global, Coordinator, CartBuilder, Substitution, StockPruner, SlotScout, ControlPanel
+- **Sprint-G-001** ready to start - run `/sprint-start` to begin
+- First task: Initialize project structure with TypeScript + Playwright
 
 ---
 

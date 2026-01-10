@@ -12,7 +12,7 @@
 
 | Sprint ID | Branch | Created | Status | Merged To |
 |-----------|--------|---------|--------|-----------|
-| - | - | - | No sprints created yet | - |
+| [Sprint-G-001](./Global/Sprint-G-001/SPRINT-PLAN.md) | main | 2026-01-10 | Planned | - |
 
 ---
 
@@ -20,14 +20,14 @@
 
 | Branch | Current Sprint | Status |
 |--------|----------------|--------|
-| - | - | No active sprints |
+| main | Sprint-G-001 | Planned |
 
 ---
 
 ## Quick Search by Topic
 
 ### Infrastructure & Setup
-- (Add sprints as they are created)
+- [Sprint-G-001](./Global/Sprint-G-001/SPRINT-PLAN.md) - Project scaffolding, Playwright setup, TypeScript config
 
 ### Features
 - (Add sprints as they are created)
@@ -44,15 +44,21 @@
 
 ### Phase 1: Foundation
 Core infrastructure and setup sprints.
-- (Add sprints as they are created)
+- [Sprint-G-001](./Global/Sprint-G-001/SPRINT-PLAN.md) - Project scaffolding, Playwright setup
+- Sprint-G-002 (Planned) - Auchan.pt login automation
+- Sprint-CB-R-001 (Planned) - Research Auchan.pt order history
+- Sprint-CB-A-001 (Planned) - CartBuilder architecture
+- Sprint-CB-I-001 (Planned) - CartBuilder implementation
+- Sprint-CO-A-001 (Planned) - Coordinator architecture
+- Sprint-CO-I-001 (Planned) - Phase 1 Coordinator implementation
 
 ### Phase 2: Features
 Main functionality implementation.
-- (Add sprints as they are created)
+- See [SPRINT-PLANNING.md](./SPRINT-PLANNING.md) for 12 planned sprints
 
 ### Phase 3: Polish
 Testing, documentation, deployment.
-- (Add sprints as they are created)
+- See [SPRINT-PLANNING.md](./SPRINT-PLANNING.md) for 8 planned sprints
 
 ---
 

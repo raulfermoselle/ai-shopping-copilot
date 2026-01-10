@@ -177,15 +177,35 @@ ai_discoverability:
     on_page_change: true
 
 # Module definitions (for multi-module mode only)
-# Uncomment and customize for your project
-modules: []
-# modules:
-#   - name: "LinkedIn"
-#     prefix: "L"
-#     path: "Modules/LinkedIn/"
-#   - name: "Discord"
-#     prefix: "DC"
-#     path: "Modules/Discord/"
+modules:
+  - name: "Global"
+    prefix: "G"
+    path: "Global/"
+    description: "Shared infrastructure, Playwright setup, config, types"
+  - name: "Coordinator"
+    prefix: "CO"
+    path: "Modules/Coordinator/"
+    description: "Orchestration agent, Review Pack generation"
+  - name: "CartBuilder"
+    prefix: "CB"
+    path: "Modules/CartBuilder/"
+    description: "Load/merge past orders, favorites"
+  - name: "Substitution"
+    prefix: "SU"
+    path: "Modules/Substitution/"
+    description: "Availability checks, replacement proposals"
+  - name: "StockPruner"
+    prefix: "SP"
+    path: "Modules/StockPruner/"
+    description: "Restock cadence, remove unneeded items"
+  - name: "SlotScout"
+    prefix: "SS"
+    path: "Modules/SlotScout/"
+    description: "Delivery slot scouting"
+  - name: "ControlPanel"
+    prefix: "CP"
+    path: "Modules/ControlPanel/"
+    description: "User interface for agent runs"
 
 # Git operations (auto-commit/push on sprint creation)
 git_operations:
