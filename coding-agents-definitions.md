@@ -1,4 +1,4 @@
-System Architect — Owns the end-to-end technical design, boundaries, and interfaces; produces the build plan, module map, and key ADRs from the solution architecture. :contentReference[oaicite:0]{index=0}
+System Architect — Owns the end-to-end technical design, boundaries, and interfaces; produces the build plan, module map, and key ADRs from the solution architecture.
 
 Repo & Scaffolding Engineer — Bootstraps the monorepo structure, tooling, linting/formatting, env config, and “happy path” dev scripts so other agents can build safely in parallel.
 
