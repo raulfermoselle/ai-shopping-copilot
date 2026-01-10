@@ -1,0 +1,49 @@
+# Policy Manifest
+# Controls which policies are active for this project
+# Documentation: See docs/CONFIGURATION-REFERENCE.md
+
+version: "1.0"
+
+# External policy source
+external:
+  # Repository URL (e.g., https://github.com/org/Joyn-Gen-AI-Policies.git)
+  repository: ""
+  # Branch to sync from
+  branch: "main"
+  # Sync method: copy | link | submodule
+  sync_mode: "copy"
+
+# Policy status
+# Set each policy to: enabled | disabled
+policies:
+  # Core policies (from external repo, no customization needed)
+  core:
+    POLICY-General-Principles: enabled
+    POLICY-API-Design: disabled
+    POLICY-Database-Guidelines: disabled
+    POLICY-Git-Version-Control: enabled
+    POLICY-Performance: disabled
+    POLICY-Documentation: enabled
+
+  # Template policies (from external repo, customized via variables)
+  templates:
+    POLICY-Testing: disabled
+    POLICY-Security: disabled
+    POLICY-Backend-Guidelines: disabled
+    POLICY-Frontend-Guidelines: disabled
+    POLICY-Sprint-Documentation: enabled
+    POLICY-AI-Assistant: enabled
+
+  # Local policies (project-specific, included by default)
+  local:
+    POLICY-AI-Context-Management: enabled
+    POLICY-Vibe-Sprint: enabled
+    POLICY-Global-Scheduler: enabled
+    # AI Discoverability policy (enable via /ai-discover-init)
+    # Controls artifact generation for AI system integration
+    POLICY-AI-Discoverability: disabled
+
+# Variables for template substitution
+# Also reads from sprint.config.yaml variables section
+variables:
+  PROJECT_PREFIX: "AISC"
