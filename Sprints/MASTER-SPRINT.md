@@ -37,7 +37,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
-| main | [Sprint-G-001](./Global/Sprint-G-001/SPRINT-PLAN.md) | Planned | - | 2026-01-10 |
+| main | [Sprint-G-001](./Global/Sprint-G-001/SPRINT-PLAN.md) | Completed | 2026-01-10 | 2026-01-10 |
 
 ---
 
@@ -74,7 +74,7 @@
 
 | Date | Branch | Sprint | Summary | Merged To |
 |------|--------|--------|---------|-----------|
-| - | - | - | No completed sprints yet | - |
+| 2026-01-10 | main | Sprint-G-001 | Project scaffolding, Playwright setup, TypeScript config | - |
 
 ---
 
@@ -124,11 +124,10 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 
 ## Notes for Next Session
 
-- Sprint Management initialized (v2.1.0)
-- SPRINT-PLANNING.md created with 27-sprint roadmap across 3 phases
-- 7 modules defined: Global, Coordinator, CartBuilder, Substitution, StockPruner, SlotScout, ControlPanel
-- **Sprint-G-001** ready to start - run `/sprint-start` to begin
-- First task: Initialize project structure with TypeScript + Playwright
+- **Sprint-G-001 completed** - Project scaffolding done
+- All development tooling in place (TypeScript, Playwright, Vitest, ESLint)
+- Next sprint: **Sprint-G-002** (Auchan.pt login automation)
+- Run `/sprint-start` to begin Sprint-G-002
 
 ---
 

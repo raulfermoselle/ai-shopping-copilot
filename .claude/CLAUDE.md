@@ -121,6 +121,45 @@ This project uses **Sprint Management Framework v2.1.0** with multi-module mode.
 
 ---
 
+## Subagent Usage (IMPORTANT)
+
+**Always use specialized subagents** to accelerate work and reduce context usage. Launch them in parallel when tasks are independent.
+
+### When to Use Subagents
+
+| Situation | Agent | Why |
+|-----------|-------|-----|
+| Implementing tool abstractions | `agent-runtime-engineer` | Tool-calling patterns, state management |
+| Error handling, retry logic | `agent-runtime-engineer` | Error classification, recovery strategies |
+| API/service layer work | `backend-api-engineer` | Endpoint design, session handling |
+| Config, database, persistence | `memory-data-engineer` | Schema design, data sync |
+| Browser automation (Playwright) | `playwright-rpa-engineer` | Selectors, retry, state recovery |
+| UI components | `frontend-engineer` | React, state, accessibility |
+| Decision heuristics (scoring, ranking) | `decisioning-heuristics-engineer` | Pure functions, testable logic |
+| Tests and QA | `test-qa-engineer` | Unit, integration, E2E tests |
+| Logging, tracing, debugging | `observability-engineer` | Structured logs, screenshots |
+| Security review | `security-safety-engineer` | Auth, secrets, purchase guardrails |
+| CI/CD pipelines | `cicd-engineer` | GitHub Actions, build automation |
+| Architecture decisions | `system-architect` | ADRs, module maps, interfaces |
+| Codebase exploration | `Explore` | Find files, understand patterns |
+
+### Parallel Execution Rules
+
+1. **Launch in parallel** when tasks don't depend on each other's output
+2. **Use `run_in_background: true`** to continue working while agents run
+3. **Check agent output files** when they complete to integrate their work
+4. **Fix any TypeScript/lint issues** agents may introduce (strict mode catches edge cases)
+
+### Example: Sprint Task Parallelization
+
+```
+Tasks T004, T005, T007 are independent → Launch 3 agents in parallel
+Task T006 I can do while waiting → Work on it directly
+When agents complete → Verify build, integrate, commit
+```
+
+---
+
 ## Multi-Instance Coordination
 
 If running multiple Claude Code instances:
@@ -142,5 +181,20 @@ If running multiple Claude Code instances:
 
 ---
 
+## Development Commands
+
+```bash
+npm run build        # TypeScript compilation
+npm run dev          # Watch mode
+npm run test:run     # Unit tests (Vitest)
+npm run test:e2e     # E2E tests (Playwright)
+npm run lint         # ESLint
+npm run check        # typecheck + lint + test
+npm run dev:browser  # Interactive browser session
+```
+
+---
+
 **Last Updated:** 2026-01-10
 **Project:** AI Shopping Copilot (AISC)
+**Current Sprint:** Sprint-G-001 (Completed)

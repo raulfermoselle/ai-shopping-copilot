@@ -1,0 +1,21 @@
+{
+  "auchan": {
+    "baseUrl": "https://www.auchan.pt",
+    "timeouts": {
+      "navigation": 30000,
+      "element": 10000
+    }
+  },
+  "browser": {
+    "headless": true,
+    "slowMo": 0,
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "logging": {
+    "level": "info",
+    "outputDir": "./logs"
+  }
+}

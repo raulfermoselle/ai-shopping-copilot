@@ -1,6 +1,6 @@
 # Sprint-G-001: Project Scaffolding & Playwright Setup
 
-<!-- SPRINT_STATUS: Planned -->
+<!-- SPRINT_STATUS: Completed -->
 <!-- CREATED: 2026-01-10 -->
 <!-- MODULE: Global -->
 <!-- TYPE: Implementation -->
@@ -12,7 +12,7 @@
 | Sprint ID | Sprint-G-001 |
 | Module | Global |
 | Type | Implementation |
-| Status | Planned |
+| Status | Completed |
 | Created | 2026-01-10 |
 | Dependencies | None (first sprint) |
 
@@ -22,12 +22,12 @@ Set up the foundational project structure and Playwright automation framework fo
 
 ## Success Criteria
 
-- [ ] Monorepo structure with clear module boundaries
-- [ ] TypeScript configured with strict mode
-- [ ] Playwright installed and configured for Auchan.pt
-- [ ] Base tool abstraction layer defined
-- [ ] Error handling patterns established
-- [ ] Development scripts (build, test, lint) working
+- [x] Monorepo structure with clear module boundaries
+- [x] TypeScript configured with strict mode
+- [x] Playwright installed and configured for Auchan.pt
+- [x] Base tool abstraction layer defined
+- [x] Error handling patterns established
+- [x] Development scripts (build, test, lint) working
 
 ---
 
