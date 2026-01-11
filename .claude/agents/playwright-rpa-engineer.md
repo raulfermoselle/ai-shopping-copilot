@@ -154,6 +154,63 @@ if (result) {
 - **Logging**: Log all significant actions (selector use, retry attempts, timeouts, state checkpoints) with timestamp and context. Use structured logging (JSON format) for easy parsing.
 - **Coordination**: Return diagnostic info that helps the coordinator understand failures (e.g., "Couldn't find 'Add to Cart' button; likely out of stock. Screenshot saved as [path]. Recommending substitution flow.").
 
+## Browser Lifecycle & Wait Strategies (CRITICAL)
+
+**ALWAYS clean up browsers. NEVER leave scripts hanging.**
+
+### Mandatory Cleanup Pattern
+```typescript
+let browser: Browser | null = null;
+try {
+  browser = await chromium.launch({ headless: false });
+  // ... do work ...
+} finally {
+  if (browser) {
+    await browser.close();
+    console.log('Browser closed.');
+  }
+}
+```
+
+### Wait Strategy Rules
+1. **NEVER use `await new Promise(() => {})` or infinite waits** - Scripts must exit when done
+2. **NEVER leave browser open "for manual inspection"** - Capture screenshots instead
+3. **Prefer `domcontentloaded` over `networkidle`** - networkidle waits for ALL network to stop (can take 30s+)
+4. **Use `waitForSelector` with short timeouts** - Don't wait 5 minutes for a button that loaded in 2 seconds
+5. **Race conditions over sequential waits** - Use `Promise.race` with a reasonable timeout
+
+### Smart Wait Examples
+```typescript
+// BAD: Waits until ALL network stops (potentially minutes)
+await page.waitForLoadState('networkidle', { timeout: 300000 });
+
+// GOOD: Wait for the specific element you need
+await page.waitForSelector('.order-list', { timeout: 10000 });
+
+// BAD: Fixed timeout regardless of page state
+await page.waitForTimeout(5000);
+
+// GOOD: Wait for element OR short timeout, whichever comes first
+await page.waitForSelector('.optional-popup', { timeout: 2000 }).catch(() => null);
+
+// BAD: Script never exits
+console.log('Browser open for review. Press Ctrl+C when done.');
+await new Promise(() => {});
+
+// GOOD: Capture what you need, then exit
+await page.screenshot({ path: 'review.png', fullPage: true });
+console.log('Screenshot saved. Exiting.');
+```
+
+### Timeout Guidelines
+| Action | Max Timeout | Notes |
+|--------|-------------|-------|
+| Element visibility check | 2-3s | If not visible quickly, it's probably not there |
+| Page navigation | 15s | Includes DNS, SSL, initial render |
+| Form submission | 10s | POST + redirect |
+| Popup/modal detection | 2s | Optional elements should fail fast |
+| Full page load (domcontentloaded) | 10s | Don't use networkidle unless required |
+
 ## Architecture Notes
 
 - **Separation of Concerns**: Browser automation layer (Playwright) should be completely decoupled from business logic. The tool API is the contract; internal implementation can change without affecting other agents.

@@ -1,0 +1,107 @@
+{
+  "title": "Histórico de Encomendas | Auchan",
+  "url": "https://www.auchan.pt/pt/historico-encomendas",
+  "possibleOrderContainers": [],
+  "sampleLinks": [
+    {
+      "text": "Skip to main content",
+      "href": "https://www.auchan.pt/pt/historico-encomendas#maincontent",
+      "className": "skip"
+    },
+    {
+      "text": "Skip to footer content",
+      "href": "https://www.auchan.pt/pt/historico-encomendas#footercontent",
+      "className": "skip"
+    },
+    {
+      "text": "Favoritos",
+      "href": "https://www.auchan.pt/pt/favoritos",
+      "className": "auc-button--favorite"
+    },
+    {
+      "text": "Folhetos",
+      "href": "https://www.auchan.pt/pt/folhetos/",
+      "className": "nav-link"
+    },
+    {
+      "text": "Promoções Clube Auchan",
+      "href": "https://www.auchan.pt/pt/promocoes-exclusivas-auchan/",
+      "className": "nav-link"
+    },
+    {
+      "text": "Marcas Auchan",
+      "href": "https://www.auchan.pt/pt/marcas-auchan/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Os Mais Amados Auchan",
+      "href": "https://www.auchan.pt/pt/os-mais-amados-auchan/",
+      "className": "nav-link"
+    },
+    {
+      "text": "Sabores Auchan",
+      "href": "https://www.auchan.pt/pt/sabores-auchan/",
+      "className": "nav-link"
+    },
+    {
+      "text": "Produtos Frescos",
+      "href": "https://www.auchan.pt/pt/produtos-frescos/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Alimentação",
+      "href": "https://www.auchan.pt/pt/alimentacao/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Bebidas e Garrafeira",
+      "href": "https://www.auchan.pt/pt/bebidas-e-garrafeira/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Biológicos e Alternativas",
+      "href": "https://www.auchan.pt/pt/biologicos-e-alternativas/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Limpeza e Cuidados do Lar",
+      "href": "https://www.auchan.pt/pt/limpeza-e-cuidados-do-lar/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Beleza e Higiene",
+      "href": "https://www.auchan.pt/pt/beleza-e-higiene/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "O Mundo do Bebé",
+      "href": "https://www.auchan.pt/pt/o-mundo-do-bebe/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Tecnologia e Eletrodomésticos",
+      "href": "https://www.auchan.pt/pt/tecnologia-e-eletrodomesticos/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Saúde e Bem Estar",
+      "href": "https://www.auchan.pt/pt/saude-e-bem-estar/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Animais",
+      "href": "https://www.auchan.pt/pt/animais/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Brinquedos e Videojogos",
+      "href": "https://www.auchan.pt/pt/brinquedos-e-videojogos/",
+      "className": "nav-link dropdown-toggle"
+    },
+    {
+      "text": "Papelaria e Livraria",
+      "href": "https://www.auchan.pt/pt/papelaria-e-livraria/",
+      "className": "nav-link dropdown-toggle"
+    }
+  ]
+}

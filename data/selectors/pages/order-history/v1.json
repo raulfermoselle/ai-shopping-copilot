@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "1.0.0",
+  "page": "order-history",
+  "version": 1,
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/historico-encomendas",
+  "lastValidated": "2026-01-11T17:30:00Z",
+  "notes": "Order history list page. Shows list of past orders with date, order number, product count, and total price.",
+  "selectors": {
+    "orderListContainer": {
+      "name": "Order list container",
+      "primary": ".auc-orders",
+      "fallbacks": [
+        "main .card-body",
+        "[class*='orders']"
+      ],
+      "score": 60,
+      "reason": "Class-based selector (moderate stability)",
+      "verified": true,
+      "notes": "Main container holding all order cards"
+    },
+    "orderCard": {
+      "name": "Individual order card",
+      "primary": ".auc-orders__order-card",
+      "fallbacks": [
+        ".card.auc-card",
+        "a[href*='detalhes-encomenda']"
+      ],
+      "score": 60,
+      "reason": "BEM class naming (moderate stability)",
+      "verified": true,
+      "notes": "Each order is wrapped in this card. Multiple per page."
+    },
+    "orderLink": {
+      "name": "Order detail link (clickable card)",
+      "primary": "a[href*='/pt/detalhes-encomenda?orderID=']",
+      "fallbacks": [
+        "a[aria-label*='View Order']",
+        ".auc-orders__order-card"
+      ],
+      "score": 75,
+      "reason": "URL pattern selector (fairly stable)",
+      "verified": true,
+      "notes": "Entire card is clickable link to order detail page"
+    },
+    "orderDate": {
+      "name": "Order date display",
+      "primary": ".auc-orders__order-date",
+      "fallbacks": [
+        "[data-date]",
+        ".auc-run--day"
+      ],
+      "score": 60,
+      "reason": "BEM class with data attribute fallback",
+      "verified": true,
+      "notes": "Contains day and month. Use data-date attribute for ISO timestamp."
+    },
+    "orderDateDay": {
+      "name": "Order date - day number",
+      "primary": ".auc-orders--date.auc-run--day",
+      "fallbacks": [
+        ".auc-run--day",
+        "[data-date][data-locale]"
+      ],
+      "score": 60,
+      "reason": "Multiple class selector",
+      "verified": true,
+      "notes": "Day of month (e.g., '02'). Has data-date with ISO timestamp."
+    },
+    "orderDateMonth": {
+      "name": "Order date - month abbreviation",
+      "primary": ".auc-orders--month.auc-run--monthd",
+      "fallbacks": [
+        ".auc-run--monthd",
+        ".auc-orders--month"
+      ],
+      "score": 60,
+      "reason": "Multiple class selector",
+      "verified": true,
+      "notes": "Month abbreviation (e.g., 'jan', 'dez'). Has data-date with ISO timestamp."
+    },
+    "orderNumber": {
+      "name": "Order number/ID",
+      "primary": ".auc-orders__order-number span:nth-child(2)",
+      "fallbacks": [
+        ".auc-orders__order-number span:last-child",
+        ".h5.auc-orders__order-number span"
+      ],
+      "score": 55,
+      "reason": "Structural selector (moderate fragility)",
+      "verified": true,
+      "notes": "Numeric order ID (e.g., '002915480'). Second span within order number container."
+    },
+    "orderNumberLabel": {
+      "name": "Order number label",
+      "primary": ".auc-orders__order-number span:first-child",
+      "fallbacks": [
+        ".auc-orders__order-number span:has-text('Encomenda')"
+      ],
+      "score": 50,
+      "reason": "Text-based selector (fragile to i18n)",
+      "verified": true,
+      "notes": "Text 'Encomenda' label before order number"
+    },
+    "orderProductCount": {
+      "name": "Number of products in order",
+      "primary": ".auc-orders__order-products",
+      "fallbacks": [
+        "[class*='order-products']",
+        ".col-12.col-md-5 > div:first-child"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Product count with 'Produtos' label (e.g., '38 Produtos')"
+    },
+    "orderTotalPrice": {
+      "name": "Order total price",
+      "primary": ".auc-orders__order-price",
+      "fallbacks": [
+        ".auc-orders--price",
+        "[class*='order-price']"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Total order price (e.g., '162,51 €')"
+    },
+    "orderArrow": {
+      "name": "Order card arrow (visual indicator)",
+      "primary": ".auc-orders__card-arrow",
+      "fallbacks": [
+        ".auc-icon--arrow-right",
+        "svg[class*='arrow']"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Right arrow SVG icon indicating clickable card"
+    }
+  },
+  "navigation": {
+    "toOrderDetail": {
+      "description": "Navigate to order detail page",
+      "action": "click",
+      "selector": "orderLink",
+      "waitFor": "networkidle",
+      "expectedUrl": "^https://(www\\.)?auchan\\.pt/pt/detalhes-encomenda\\?orderID="
+    }
+  },
+  "extraction": {
+    "orderList": {
+      "description": "Extract all orders from list page",
+      "container": "orderListContainer",
+      "item": "orderCard",
+      "fields": {
+        "orderDate": "orderDate [data-date]",
+        "orderNumber": "orderNumber span:nth-child(2)",
+        "productCount": "orderProductCount (parse integer)",
+        "totalPrice": "orderTotalPrice (parse currency)",
+        "detailUrl": "orderLink [href]"
+      }
+    }
+  }
+}

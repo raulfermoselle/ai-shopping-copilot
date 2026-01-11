@@ -267,4 +267,4 @@ npm run dev:browser  # Interactive browser session
 
 **Last Updated:** 2026-01-11
 **Project:** AI Shopping Copilot (AISC)
-**Current Sprint:** Sprint-G-002 (Completed)
+**Current Sprint:** Sprint-CB-R-001 (In Progress)

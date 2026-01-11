@@ -1,0 +1,361 @@
+{
+  "schemaVersion": "1.0.0",
+  "page": "order-detail",
+  "version": 1,
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/detalhes-encomenda\\?orderID=",
+  "lastValidated": "2026-01-11T17:45:00Z",
+  "notes": "Order detail page. Shows order header, delivery info, product list, and order summary. Products may be paginated with 'Ver todos' (View all) button.",
+  "selectors": {
+    "pageTitle": {
+      "name": "Page title",
+      "primary": "h1",
+      "fallbacks": [
+        ".page-title",
+        "h1:has-text('Detalhes')"
+      ],
+      "score": 65,
+      "reason": "Tag-based selector (fairly stable)",
+      "verified": true,
+      "notes": "Should contain 'Detalhes da encomenda'"
+    },
+    "orderHeader": {
+      "name": "Order header section",
+      "primary": ".auc-orders__order-header",
+      "fallbacks": [
+        "[class*='order-header']",
+        ".card:has(.auc-orders--date)"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Contains order date, number, product count, and total"
+    },
+    "orderDate": {
+      "name": "Order date",
+      "primary": ".auc-orders--date",
+      "fallbacks": [
+        "[data-date]",
+        ".auc-run--day"
+      ],
+      "score": 60,
+      "reason": "BEM class with data attribute fallback",
+      "verified": true,
+      "notes": "Use data-date attribute for ISO timestamp"
+    },
+    "orderNumber": {
+      "name": "Order number",
+      "primary": ".auc-orders__order-number",
+      "fallbacks": [
+        "[class*='order-number']",
+        "h5:has-text('Encomenda')"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Contains 'Encomenda' label and numeric ID"
+    },
+    "orderProductCount": {
+      "name": "Total number of products",
+      "primary": ".auc-orders__order-products",
+      "fallbacks": [
+        "[class*='order-products']",
+        "p:has-text('Produtos')"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Shows count like '38 Produtos'"
+    },
+    "orderTotalPrice": {
+      "name": "Order total price",
+      "primary": ".auc-orders__order-price",
+      "fallbacks": [
+        ".auc-orders--price",
+        "[class*='order-price']"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Total order price in header"
+    },
+    "deliverySection": {
+      "name": "Delivery information section",
+      "primary": ".auc-orders--delivery-info",
+      "fallbacks": [
+        "[class*='delivery']",
+        ".auc-orders__sub-order"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Contains delivery type, address, date/time"
+    },
+    "deliveryType": {
+      "name": "Delivery type",
+      "primary": ".auc-order-adress",
+      "fallbacks": [
+        ".auc-orders--delivery-info span",
+        "[class*='delivery'] span:first-child"
+      ],
+      "score": 55,
+      "reason": "Class selector (moderate stability)",
+      "verified": true,
+      "notes": "e.g., 'Entrega em Casa' (Home delivery)"
+    },
+    "deliveryAddress": {
+      "name": "Delivery address",
+      "primary": ".auc-orders__sub-order-address",
+      "fallbacks": [
+        ".auc-orders--suborder-address",
+        "[class*='address']"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Full delivery address"
+    },
+    "deliveryDateTime": {
+      "name": "Delivery date and time",
+      "primary": ".auc-orders--delivery-date",
+      "fallbacks": [
+        "[class*='delivery-date']",
+        "p:has-text('Data de entrega')"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Expected delivery date/time window"
+    },
+    "productListContainer": {
+      "name": "Product list container",
+      "primary": ".auc-orders__products",
+      "fallbacks": [
+        "[class*='products']",
+        ".row:has(.auc-orders__product-card)"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Container for all product cards"
+    },
+    "productCard": {
+      "name": "Individual product card",
+      "primary": ".auc-orders__product-card",
+      "fallbacks": [
+        ".card.auc-card",
+        ".col-12.card"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Each product in the order. Multiple per page."
+    },
+    "productImage": {
+      "name": "Product image",
+      "primary": ".auc-cart__product-image",
+      "fallbacks": [
+        ".product-image",
+        "img[alt*='']"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Product thumbnail image"
+    },
+    "productName": {
+      "name": "Product name",
+      "primary": ".auc-orders__product-name",
+      "fallbacks": [
+        ".auc-orders--product-name",
+        "[class*='product-name']"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Product name with link to product page"
+    },
+    "productNameLink": {
+      "name": "Product name link",
+      "primary": ".auc-orders__product-name a",
+      "fallbacks": [
+        ".auc-orders--product-name a",
+        ".auc-orders__product-card a[href*='/produtos']"
+      ],
+      "score": 60,
+      "reason": "Combined selector",
+      "verified": true,
+      "notes": "Link to product page. Extract text for product name."
+    },
+    "productQuantity": {
+      "name": "Product quantity",
+      "primary": ".auc-orders__product-quantity",
+      "fallbacks": [
+        "[class*='product-quantity']",
+        ".col-6.col-md-auto:has-text('x')"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Quantity like 'x0' or 'x2'. Parse numeric value."
+    },
+    "productPrice": {
+      "name": "Product price",
+      "primary": ".auc-orders__product-price",
+      "fallbacks": [
+        "[class*='product-price']",
+        ".auc-orders--price"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Price per product (e.g., '1,39 €')"
+    },
+    "viewAllButton": {
+      "name": "View all products button",
+      "primary": "button:has-text('Ver todos')",
+      "fallbacks": [
+        "[aria-label*='Ver todos']",
+        "button[class*='show-all']"
+      ],
+      "score": 50,
+      "reason": "Text-based selector (i18n fragile)",
+      "verified": true,
+      "notes": "Expands list to show all products (if paginated)"
+    },
+    "reorderButton": {
+      "name": "Reorder button",
+      "primary": "button:has-text('Encomendar de novo')",
+      "fallbacks": [
+        "[aria-label*='Encomendar']",
+        ".auc-button--primary:has-text('novo')"
+      ],
+      "score": 50,
+      "reason": "Text-based selector (i18n fragile)",
+      "verified": true,
+      "notes": "Adds all order items to cart"
+    },
+    "summarySection": {
+      "name": "Order summary section",
+      "primary": ".auc-checkout__totals",
+      "fallbacks": [
+        "[class*='totals']",
+        "div:has(h5:has-text('Resumo'))"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Contains subtotal, delivery fee, and total"
+    },
+    "summaryTitle": {
+      "name": "Summary section title",
+      "primary": "h5:has-text('Resumo')",
+      "fallbacks": [
+        ".auc-checkout__totals h5",
+        "[class*='summary-title']"
+      ],
+      "score": 50,
+      "reason": "Text-based selector",
+      "verified": true,
+      "notes": "Title 'Resumo'"
+    },
+    "summaryProductsTotal": {
+      "name": "Products subtotal",
+      "primary": ".order-receipt-label:has-text('Total produtos') + div .tax-total",
+      "fallbacks": [
+        ".tax-total",
+        "p:has-text('Total produtos') + p"
+      ],
+      "score": 55,
+      "reason": "Structural selector",
+      "verified": true,
+      "notes": "Subtotal of all products before delivery"
+    },
+    "summaryDeliveryFee": {
+      "name": "Delivery fee",
+      "primary": ".order-receipt-label:has-text('Entrega') + div",
+      "fallbacks": [
+        "p:has-text('Entrega') + p",
+        "[class*='delivery-fee']"
+      ],
+      "score": 50,
+      "reason": "Text-based structural selector",
+      "verified": true,
+      "notes": "Delivery/shipping fee"
+    },
+    "summaryTotal": {
+      "name": "Order total",
+      "primary": ".auc-checkout__totals-grandtotal",
+      "fallbacks": [
+        "[class*='grandtotal']",
+        "p:has-text('Total') + p"
+      ],
+      "score": 60,
+      "reason": "BEM class selector",
+      "verified": true,
+      "notes": "Final order total including all fees"
+    }
+  },
+  "navigation": {
+    "expandAllProducts": {
+      "description": "Click 'Ver todos' to show all products",
+      "action": "click",
+      "selector": "viewAllButton",
+      "waitFor": "load",
+      "expectedResult": "All products visible, button hidden"
+    },
+    "reorder": {
+      "description": "Add all order items to cart",
+      "action": "click",
+      "selector": "reorderButton",
+      "waitFor": "networkidle",
+      "expectedResult": "Items added to cart"
+    },
+    "viewProduct": {
+      "description": "Navigate to individual product page",
+      "action": "click",
+      "selector": "productNameLink",
+      "waitFor": "networkidle",
+      "expectedUrl": "^https://(www\\.)?auchan\\.pt/pt/.+\\.html$"
+    }
+  },
+  "extraction": {
+    "orderDetails": {
+      "description": "Extract order header information",
+      "fields": {
+        "orderDate": "orderDate [data-date]",
+        "orderNumber": "orderNumber (parse text)",
+        "productCount": "orderProductCount (parse integer)",
+        "totalPrice": "orderTotalPrice (parse currency)"
+      }
+    },
+    "deliveryInfo": {
+      "description": "Extract delivery information",
+      "fields": {
+        "deliveryType": "deliveryType (text)",
+        "address": "deliveryAddress (text)",
+        "dateTime": "deliveryDateTime (text)"
+      }
+    },
+    "productList": {
+      "description": "Extract all products in order",
+      "container": "productListContainer",
+      "item": "productCard",
+      "fields": {
+        "name": "productNameLink (text)",
+        "productUrl": "productNameLink [href]",
+        "imageUrl": "productImage [src]",
+        "quantity": "productQuantity (parse integer from 'x#')",
+        "price": "productPrice (parse currency)"
+      },
+      "notes": "May need to click 'Ver todos' first to see all products"
+    },
+    "orderSummary": {
+      "description": "Extract order cost breakdown",
+      "fields": {
+        "subtotal": "summaryProductsTotal (parse currency)",
+        "deliveryFee": "summaryDeliveryFee (parse currency)",
+        "total": "summaryTotal (parse currency)"
+      }
+    }
+  }
+}

@@ -37,7 +37,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
-| main | [Sprint-G-002](./Global/Sprint-G-002/SPRINT-PLAN.md) | Completed | 2026-01-11 | 2026-01-11 |
+| main | [Sprint-CB-R-001](./Modules/CartBuilder/Sprint-CB-R-001/SPRINT-PLAN.md) | In Progress | 2026-01-11 | 2026-01-11 |
 
 ---
 
@@ -45,7 +45,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Active Sprints | 0 |
+| Total Active Sprints | 1 |
 | Sprints This Week | 2 |
 | Pending Merges | 0 |
 
@@ -56,7 +56,7 @@
 ## Sprint Queue (Prioritized)
 
 ### Priority 1 (Next)
-- **Sprint-CB-R-001**: Research Auchan.pt order history UI
+- **Sprint-CB-R-001**: Research Auchan.pt order history UI *(Active)*
 - Sprint-SU-R-001: Research Auchan.pt product search
 - Sprint-SS-R-001: Research Auchan.pt delivery slots
 
@@ -123,12 +123,11 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 
 ## Notes for Next Session
 
-- **Sprint-G-002 completed** - Login automation verified working
-- **Selector Registry system** established for autonomous page discovery
-- Login verified with real credentials (user "RAUL" logged in)
-- Credentials via env vars: AUCHAN_EMAIL, AUCHAN_PASSWORD
-- Session persistence implemented for cookie reuse
-- Next: **Sprint-CB-R-001** (Research Auchan.pt order history UI)
+- **Sprint-CB-R-001 active** - Researching Auchan.pt order history UI
+- Goal: Discover selectors for order history and order details pages
+- Use playwright-rpa-engineer for autonomous page discovery
+- Login working (AUCHAN_EMAIL, AUCHAN_PASSWORD env vars)
+- Selector Registry system ready for new page registrations
 
 ---
 

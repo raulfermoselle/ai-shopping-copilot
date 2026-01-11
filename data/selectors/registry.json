@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "lastValidated": "2026-01-11T00:00:00Z",
+  "lastValidated": "2026-01-11T17:45:00Z",
   "pages": {
     "login": {
       "name": "Login Page",
@@ -12,6 +12,30 @@
         "status": "valid",
         "failedSelectors": []
       }
+    },
+    "order-history": {
+      "name": "Order History List",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/historico-encomendas",
+      "activeVersion": 1,
+      "versions": [1],
+      "lastValidation": {
+        "timestamp": "2026-01-11T17:45:00Z",
+        "status": "valid",
+        "failedSelectors": []
+      },
+      "notes": "Shows list of past orders. Navigate via account menu > 'Histórico de encomendas'"
+    },
+    "order-detail": {
+      "name": "Order Detail Page",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/detalhes-encomenda\\?orderID=",
+      "activeVersion": 1,
+      "versions": [1],
+      "lastValidation": {
+        "timestamp": "2026-01-11T17:45:00Z",
+        "status": "valid",
+        "failedSelectors": []
+      },
+      "notes": "Shows order details, delivery info, product list, and summary. Accessed by clicking order card from order-history page."
     }
   }
 }

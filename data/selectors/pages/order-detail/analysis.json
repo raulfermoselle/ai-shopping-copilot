@@ -1,0 +1,17 @@
+{
+  "title": "Detalhes da sua Encomenda | Auchan",
+  "url": "https://www.auchan.pt/pt/detalhes-encomenda?orderID=a17648d5-92a8-468b-997a-5d667b23e837",
+  "possibleContainers": [
+    {
+      "selector": "[class*=\"item\"]",
+      "count": 330,
+      "hasChildren": 1
+    },
+    {
+      "selector": "ul",
+      "count": 26,
+      "hasChildren": 22
+    }
+  ],
+  "possibleItems": []
+}
