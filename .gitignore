@@ -39,3 +39,12 @@ Sprints/.sprint-state.local
 credentials.json
 *.pem
 *.key
+
+# Runtime session data
+/sessions/
+
+# Screenshots (debugging artifacts)
+/screenshots/*.png
+
+# Windows reserved names
+nul
