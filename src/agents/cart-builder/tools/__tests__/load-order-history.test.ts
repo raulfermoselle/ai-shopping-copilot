@@ -85,6 +85,9 @@ function createMockContext(page: Page): ToolContext {
 
 /**
  * Create a mock ElementHandle for order card
+ *
+ * The card itself can be the `<a>` tag with an href attribute,
+ * or it may contain a nested link element.
  */
 function createMockOrderCard(overrides: {
   orderId?: string;
@@ -92,6 +95,7 @@ function createMockOrderCard(overrides: {
   productCount?: string;
   totalPrice?: string;
   detailUrl?: string;
+  cardIsLink?: boolean; // If true, the card itself has the href attribute
 } = {}): ElementHandle {
   const defaults = {
     orderId: '002915480',
@@ -99,13 +103,21 @@ function createMockOrderCard(overrides: {
     productCount: '38 Produtos',
     totalPrice: '162,51 €',
     detailUrl: '/pt/conta/detalhes-encomenda/002915480',
+    cardIsLink: true, // Default: card itself is the link (matches Auchan.pt)
   };
 
   const values = { ...defaults, ...overrides };
 
   const mockCard = {
+    // The card itself might have an href attribute (card IS the link)
+    getAttribute: vi.fn().mockImplementation((attr: string) => {
+      if (attr === 'href' && values.cardIsLink) {
+        return values.detailUrl;
+      }
+      return null;
+    }),
     $: vi.fn().mockImplementation((selector: string) => {
-      if (selector.includes('link') || selector.includes('Link')) {
+      if (selector.includes('link') || selector.includes('Link') || selector.includes('detalhes-encomenda')) {
         return Promise.resolve({
           getAttribute: vi.fn().mockResolvedValue(values.detailUrl),
         });
@@ -488,7 +500,7 @@ describe('loadOrderHistoryTool', () => {
       // Assert
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe('SELECTOR_ERROR');
-      expect(result.error?.message).toContain('Order card selector not registered');
+      expect(result.error?.message).toContain('Order card/link selector not registered');
     });
   });
 

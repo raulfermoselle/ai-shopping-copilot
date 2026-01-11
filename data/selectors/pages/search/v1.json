@@ -1,0 +1,303 @@
+{
+  "schemaVersion": "1.0.0",
+  "page": "search",
+  "version": 1,
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/pesquisa",
+  "lastValidated": "2026-01-11T22:30:00Z",
+  "notes": "Product search results page. Shows grid of product tiles with search query, filters, and pagination. URL format: /pt/pesquisa?q={query}",
+  "selectors": {
+    "resultsContainer": {
+      "name": "Search results container",
+      "primary": ".product-grid",
+      "fallbacks": [
+        ".auc-product",
+        ".search-results"
+      ],
+      "score": 75,
+      "reason": "Semantic class naming",
+      "verified": true,
+      "notes": "Main container for all product search results"
+    },
+    "resultsCount": {
+      "name": "Results count text",
+      "primary": ".search-result-count",
+      "fallbacks": [
+        ".auc-search-results",
+        ".auc-js-search-results-count"
+      ],
+      "score": 70,
+      "reason": "Semantic class naming",
+      "verified": true,
+      "notes": "Displays total number of results (e.g., '1,059 resultados para:')"
+    },
+    "searchKeywords": {
+      "name": "Search query display",
+      "primary": ".search-keywords",
+      "fallbacks": [
+        "h1 .search-keywords"
+      ],
+      "score": 70,
+      "reason": "Semantic class naming",
+      "verified": true,
+      "notes": "Displays the search query string (e.g., '\"leite\"')"
+    },
+    "productTile": {
+      "name": "Individual product card",
+      "primary": ".auc-product-tile",
+      "fallbacks": [
+        ".auc-js-product-tile",
+        "[data-pid]"
+      ],
+      "score": 85,
+      "reason": "BEM naming with data attribute fallback",
+      "verified": true,
+      "notes": "Individual product card. Has data-pid attribute with unique product ID. This is the main container for each product in search results."
+    },
+    "productId": {
+      "name": "Product ID attribute",
+      "primary": "[data-pid]",
+      "fallbacks": [],
+      "score": 95,
+      "reason": "Data attribute (highly stable)",
+      "verified": true,
+      "notes": "Extract using element.getAttribute('data-pid'). Unique product identifier."
+    },
+    "productName": {
+      "name": "Product name/title",
+      "primary": ".auc-product-tile__name",
+      "fallbacks": [
+        ".auc-product-tile .product-name"
+      ],
+      "score": 80,
+      "reason": "BEM element naming",
+      "verified": true,
+      "notes": "Product name text within product tile"
+    },
+    "productImageContainer": {
+      "name": "Product image container",
+      "primary": ".auc-product-tile__image-container",
+      "fallbacks": [
+        ".product-image"
+      ],
+      "score": 75,
+      "reason": "BEM element naming",
+      "verified": true,
+      "notes": "Container for product image and link to product detail page"
+    },
+    "productImage": {
+      "name": "Product image",
+      "primary": ".auc-product-tile__image-container__image img",
+      "fallbacks": [
+        ".auc-product-tile img[alt]"
+      ],
+      "score": 75,
+      "reason": "BEM descendant with semantic fallback",
+      "verified": true,
+      "notes": "Product image element. Check alt and src attributes."
+    },
+    "productLink": {
+      "name": "Link to product detail page",
+      "primary": ".auc-product-tile__image-container a",
+      "fallbacks": [
+        ".auc-product-tile__name a",
+        ".auc-product-tile a[href*='/produtos/']"
+      ],
+      "score": 75,
+      "reason": "Structural selector with URL pattern fallback",
+      "verified": true,
+      "notes": "Link to product detail page. URL format: /pt/alimentacao/.../product-slug/{pid}.html"
+    },
+    "productPriceContainer": {
+      "name": "Price information container",
+      "primary": ".auc-product-tile__prices",
+      "fallbacks": [
+        ".price-container"
+      ],
+      "score": 75,
+      "reason": "BEM element naming",
+      "verified": true,
+      "notes": "Container for all price-related information"
+    },
+    "productPrice": {
+      "name": "Product price",
+      "primary": ".auc-product-tile__prices .price",
+      "fallbacks": [
+        ".auc-product-tile .price",
+        ".price"
+      ],
+      "score": 80,
+      "reason": "Semantic class naming",
+      "verified": true,
+      "notes": "Product price text (e.g., '0,86 €'). Parse first line of textContent."
+    },
+    "productRating": {
+      "name": "Product rating/reviews",
+      "primary": ".auc-product-tile__bazaarvoice--ratings",
+      "fallbacks": [
+        ".ratings",
+        "[class*='rating']"
+      ],
+      "score": 70,
+      "reason": "Third-party integration class",
+      "verified": true,
+      "notes": "Product rating element (BazaarVoice integration). May not be present for all products."
+    },
+    "productLabels": {
+      "name": "Product labels/badges",
+      "primary": ".auc-product-tile__labels",
+      "fallbacks": [
+        ".product-labels",
+        ".auc-product-labels"
+      ],
+      "score": 75,
+      "reason": "BEM element naming",
+      "verified": true,
+      "notes": "Container for promotional badges and labels (e.g., 'Produto Nacional')"
+    },
+    "productMeasures": {
+      "name": "Product unit/measure info",
+      "primary": ".auc-product-tile__measures",
+      "fallbacks": [
+        ".product-measures"
+      ],
+      "score": 70,
+      "reason": "BEM element naming",
+      "verified": false,
+      "notes": "Product unit information (e.g., '1L', '500g'). NOT VERIFIED with actual content."
+    },
+    "productNotes": {
+      "name": "Product notes/description",
+      "primary": ".auc-product-tile__notes",
+      "fallbacks": [
+        ".product-notes"
+      ],
+      "score": 65,
+      "reason": "BEM element naming",
+      "verified": false,
+      "notes": "Additional product notes or description. NOT VERIFIED."
+    },
+    "productPromoBadges": {
+      "name": "Promotional badges",
+      "primary": ".auc-product-tile__promo-badges",
+      "fallbacks": [
+        ".promo-badges",
+        "[class*='promo']"
+      ],
+      "score": 70,
+      "reason": "BEM element naming",
+      "verified": false,
+      "notes": "Promotional badge container (discounts, offers, etc.). NOT VERIFIED."
+    },
+    "productQuantitySelector": {
+      "name": "Quantity selector and add to cart controls",
+      "primary": ".auc-product-tile__quantity-selector",
+      "fallbacks": [
+        ".quantity-selector"
+      ],
+      "score": 75,
+      "reason": "BEM element naming",
+      "verified": true,
+      "notes": "Container for quantity selection and add to cart button"
+    },
+    "addToCartButton": {
+      "name": "Add to cart button",
+      "primary": ".auc-product-tile__quantity-selector button.auc-js-add-to-cart",
+      "fallbacks": [
+        ".auc-js-add-to-cart",
+        "button[class*='add-to-cart']"
+      ],
+      "score": 75,
+      "reason": "JS hook class with BEM context",
+      "verified": true,
+      "notes": "Add to cart button. May be disabled if product unavailable. Classes: auc-button__circle auc-js-add-to-cart"
+    },
+    "wishlistButton": {
+      "name": "Add to wishlist button",
+      "primary": ".auc-product__add-to-wishlist__button",
+      "fallbacks": [
+        ".auc-js-product-add-to-wishlist",
+        "[class*='wishlist']"
+      ],
+      "score": 75,
+      "reason": "BEM naming with JS hook fallback",
+      "verified": true,
+      "notes": "Add to wishlist button within product tile"
+    },
+    "unavailableIndicator": {
+      "name": "Out of stock indicator",
+      "primary": ".auc-product-tile--unavailable",
+      "fallbacks": [
+        ".auc-product-tile[class*='unavailable']",
+        ".auc-product-tile button[disabled]"
+      ],
+      "score": 65,
+      "reason": "BEM modifier with attribute fallback",
+      "verified": false,
+      "notes": "Indicates product is out of stock. May be class modifier on tile or disabled button. NOT VERIFIED - no unavailable products found in test searches."
+    },
+    "sortDropdown": {
+      "name": "Sort order dropdown",
+      "primary": ".auc-search__sort-order-menu",
+      "fallbacks": [
+        "[class*='sort']"
+      ],
+      "score": 70,
+      "reason": "BEM naming",
+      "verified": false,
+      "notes": "Dropdown to change sort order (price, name, etc.). NOT VERIFIED."
+    },
+    "filterSection": {
+      "name": "Filter/refinement section",
+      "primary": ".auc-search__filters-body",
+      "fallbacks": [
+        ".auc-search__left-section",
+        "[class*='filter']"
+      ],
+      "score": 70,
+      "reason": "BEM naming",
+      "verified": false,
+      "notes": "Left sidebar with category, price, brand filters. NOT VERIFIED."
+    }
+  },
+  "navigation": {
+    "toProductDetail": {
+      "description": "Navigate to product detail page",
+      "action": "click",
+      "selector": "productLink (within productTile)",
+      "waitFor": "domcontentloaded",
+      "expectedUrl": "^https://(www\\.)?auchan\\.pt/pt/.*\\.html$"
+    },
+    "addToCart": {
+      "description": "Add product to cart from search results",
+      "action": "click",
+      "selector": "addToCartButton (within productTile)",
+      "waitFor": "networkidle or modal appearance",
+      "notes": "May trigger modal or inline confirmation. Check for cart count update."
+    }
+  },
+  "extraction": {
+    "searchMetadata": {
+      "description": "Extract search metadata",
+      "fields": {
+        "query": "searchKeywords (text content)",
+        "totalResults": "resultsCount (parse number from text)",
+        "currentPage": "URL parameter 'start' or 'page'"
+      }
+    },
+    "productList": {
+      "description": "Extract all products from search results",
+      "container": "resultsContainer",
+      "item": "productTile",
+      "fields": {
+        "pid": "productId [data-pid] (string)",
+        "name": "productName (text content)",
+        "price": "productPrice (parse currency from first line)",
+        "imageUrl": "productImage [src] (string)",
+        "imageAlt": "productImage [alt] (string)",
+        "productUrl": "productLink [href] (string)",
+        "hasRating": "productRating (boolean - exists check)",
+        "available": "NOT unavailableIndicator OR addToCartButton:not([disabled]) (boolean)"
+      }
+    }
+  }
+}

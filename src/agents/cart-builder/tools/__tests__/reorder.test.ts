@@ -59,20 +59,23 @@ function createMockPage(): {
   goto: Mock;
   waitForTimeout: Mock;
   locator: Mock;
+  waitForSelector: Mock;
 } {
   const url = vi.fn();
   const goto = vi.fn();
-  const waitForTimeout = vi.fn();
+  const waitForTimeout = vi.fn().mockResolvedValue(undefined);
   const locator = vi.fn();
+  const waitForSelector = vi.fn().mockRejectedValue(new Error('No modal'));
 
   const page = {
     url,
     goto,
     waitForTimeout,
     locator,
+    waitForSelector,
   } as unknown as Page;
 
-  return { page, url, goto, waitForTimeout, locator };
+  return { page, url, goto, waitForTimeout, locator, waitForSelector };
 }
 
 /**
@@ -101,11 +104,27 @@ function createMockContext(page: Page): ToolContext {
  */
 function createMockElement(): ElementHandle {
   return {
-    click: vi.fn(),
+    click: vi.fn().mockResolvedValue(undefined),
     textContent: vi.fn(),
     getAttribute: vi.fn(),
+    isVisible: vi.fn().mockResolvedValue(true),
+    isEnabled: vi.fn().mockResolvedValue(true),
   } as unknown as ElementHandle;
 }
+
+/**
+ * Create a locator mock that simulates a cart count indicator showing a specific value
+ */
+/*
+function createCartCountLocator(count: number): Locator {
+  return {
+    first: vi.fn().mockReturnThis(),
+    all: vi.fn().mockResolvedValue([]),
+    textContent: vi.fn().mockResolvedValue(String(count)),
+    isVisible: vi.fn().mockResolvedValue(true),
+  } as unknown as Locator;
+}
+*/
 
 describe('reorderTool', () => {
   let mockPage: ReturnType<typeof createMockPage>;
@@ -131,24 +150,46 @@ describe('reorderTool', () => {
   });
 
   describe('execute - successful reorder', () => {
-    it('should click reorder button and return success', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue(
-        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      );
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
+    /**
+     * Setup common mock for successful reorder tests.
+     * Simulates: cart starts at 0 items, ends at 10 items after reorder.
+     */
+    function setupSuccessfulReorderMocks() {
+      // First URL call is to check if already on page
+      // After cart update wait, URL returns cart page (redirect)
+      mockPage.url
+        .mockReturnValueOnce('https://www.auchan.pt/pt/conta/detalhes-encomenda/001') // initial check
+        .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // after reorder - redirected to cart
+
+      // Make waitForSelector succeed for modal detection
+      mockPage.waitForSelector.mockResolvedValue({});
 
       const mockReorderButton = createMockElement();
+
+      // Create a mock modal confirm button
+      const mockConfirmButton = createMockElement();
+
       (mockResolverInstance.tryResolve as Mock).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'reorderButton') {
             return { element: mockReorderButton, usedFallback: false };
           }
+          if (selectorKey === 'reorderModalConfirmButton' || selectorKey === 'reorderModalMergeButton') {
+            return { element: mockConfirmButton, usedFallback: false };
+          }
           return null;
         }
       );
 
+      // Default locator mock - no popup visible, no cart count
       mockPage.locator.mockReturnValue(createMockLocator());
+
+      return mockReorderButton;
+    }
+
+    it('should click reorder button and return success', async () => {
+      // Arrange
+      const mockReorderButton = setupSuccessfulReorderMocks();
 
       // Act
       const result = await reorderTool.execute(
@@ -168,18 +209,7 @@ describe('reorderTool', () => {
 
     it('should wait for cart update after clicking', async () => {
       // Arrange
-      mockPage.url.mockReturnValue(
-        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      );
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
-      const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
-        element: mockReorderButton,
-        usedFallback: false,
-      });
-
-      mockPage.locator.mockReturnValue(createMockLocator());
+      setupSuccessfulReorderMocks();
 
       // Act
       await reorderTool.execute(
@@ -198,20 +228,9 @@ describe('reorderTool', () => {
       );
     });
 
-    it('should capture before and after screenshots', async () => {
+    it('should capture before, modal, and after screenshots', async () => {
       // Arrange
-      mockPage.url.mockReturnValue(
-        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      );
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
-      const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
-        element: mockReorderButton,
-        usedFallback: false,
-      });
-
-      mockPage.locator.mockReturnValue(createMockLocator());
+      setupSuccessfulReorderMocks();
 
       // Act
       const result = await reorderTool.execute(
@@ -224,8 +243,9 @@ describe('reorderTool', () => {
 
       // Assert
       expect(context.screenshot).toHaveBeenCalledWith('reorder-before-001');
+      expect(context.screenshot).toHaveBeenCalledWith('reorder-modal-001');
       expect(context.screenshot).toHaveBeenCalledWith('reorder-after-001');
-      expect(result.screenshots?.length).toBe(2);
+      expect(result.screenshots?.length).toBe(3);
     });
   });
 
@@ -290,11 +310,10 @@ describe('reorderTool', () => {
 
   describe('execute - already on order page', () => {
     it('should work without navigation when already on order page', async () => {
-      // Arrange - URL already contains orderId
-      mockPage.url.mockReturnValue(
-        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      );
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
+      // Arrange - URL already contains orderId, then redirects to cart
+      mockPage.url
+        .mockReturnValueOnce('https://www.auchan.pt/pt/conta/detalhes-encomenda/001')
+        .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect after reorder
 
       const mockReorderButton = createMockElement();
       (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
@@ -361,11 +380,10 @@ describe('reorderTool', () => {
 
   describe('execute - error messages detection', () => {
     it('should detect and include error messages in failedItems', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue(
-        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      );
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
+      // Arrange - simulate redirect to cart (success) but with error messages
+      mockPage.url
+        .mockReturnValueOnce('https://www.auchan.pt/pt/conta/detalhes-encomenda/001')
+        .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect after reorder
 
       const mockReorderButton = createMockElement();
       (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
@@ -406,11 +424,10 @@ describe('reorderTool', () => {
     });
 
     it('should log warning when some items fail', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue(
-        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      );
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
+      // Arrange - simulate redirect to cart (success) but with error messages
+      mockPage.url
+        .mockReturnValueOnce('https://www.auchan.pt/pt/conta/detalhes-encomenda/001')
+        .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect after reorder
 
       const mockReorderButton = createMockElement();
       (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
@@ -455,13 +472,10 @@ describe('reorderTool', () => {
 
   describe('execute - cart redirect detection', () => {
     it('should detect when redirected to cart page', async () => {
-      // Arrange
+      // Arrange - starts on order page, ends on cart page
       mockPage.url
-        .mockReturnValueOnce(
-          'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-        )
+        .mockReturnValueOnce('https://www.auchan.pt/pt/conta/detalhes-encomenda/001')
         .mockReturnValue('https://www.auchan.pt/pt/carrinho');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       const mockReorderButton = createMockElement();
       (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
@@ -472,7 +486,7 @@ describe('reorderTool', () => {
       mockPage.locator.mockReturnValue(createMockLocator());
 
       // Act
-      await reorderTool.execute(
+      const result = await reorderTool.execute(
         {
           orderId: '001',
           detailUrl: 'https://www.auchan.pt/pt/conta/detalhes-encomenda/001',
@@ -481,6 +495,7 @@ describe('reorderTool', () => {
       );
 
       // Assert
+      expect(result.success).toBe(true);
       expect(context.logger.info).toHaveBeenCalledWith(
         'Redirected to cart page after reorder'
       );
@@ -574,11 +589,10 @@ describe('reorderTool', () => {
 
   describe('execute - cart item count detection', () => {
     it('should try to detect cart item count after reorder', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue(
-        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      );
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
+      // Arrange - starts on order page, redirects to cart
+      mockPage.url
+        .mockReturnValueOnce('https://www.auchan.pt/pt/conta/detalhes-encomenda/001')
+        .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect
 
       const mockReorderButton = createMockElement();
       (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
@@ -614,6 +628,38 @@ describe('reorderTool', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.data?.itemsAdded).toBeDefined();
+    });
+  });
+
+  describe('execute - cart verification failure', () => {
+    it('should fail when cart does not change and no redirect', async () => {
+      // Arrange - stays on order page, no cart change
+      mockPage.url.mockReturnValue(
+        'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
+      ); // never redirects to cart
+
+      const mockReorderButton = createMockElement();
+      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+        element: mockReorderButton,
+        usedFallback: false,
+      });
+
+      // No cart count visible
+      mockPage.locator.mockReturnValue(createMockLocator());
+
+      // Act
+      const result = await reorderTool.execute(
+        {
+          orderId: '001',
+          detailUrl: 'https://www.auchan.pt/pt/conta/detalhes-encomenda/001',
+        },
+        context
+      );
+
+      // Assert - should fail because cart didn't change
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('VALIDATION_ERROR');
+      expect(result.error?.message).toContain('did not modify cart');
     });
   });
 });

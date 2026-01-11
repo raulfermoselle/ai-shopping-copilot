@@ -293,6 +293,58 @@
       "reason": "BEM class selector",
       "verified": true,
       "notes": "Final order total including all fees"
+    },
+    "reorderModal": {
+      "name": "Reorder confirmation modal",
+      "primary": ".auc-modal[data-visible='true']",
+      "fallbacks": [
+        ".modal.show",
+        "[role='dialog'][aria-modal='true']",
+        ".auc-modal--visible"
+      ],
+      "score": 55,
+      "reason": "Attribute-based modal detection",
+      "verified": false,
+      "notes": "Modal that appears after clicking reorder button. Contains options to reorder (replace) or merge cart."
+    },
+    "reorderModalConfirmButton": {
+      "name": "Modal confirm reorder button",
+      "primary": ".auc-modal button:has-text('Encomendar de novo')",
+      "fallbacks": [
+        "[role='dialog'] button:has-text('Encomendar')",
+        ".modal button.btn-primary:has-text('novo')",
+        ".auc-modal .auc-button--primary"
+      ],
+      "score": 50,
+      "reason": "Text-based button in modal (i18n fragile)",
+      "verified": false,
+      "notes": "Confirms reorder - replaces current cart contents"
+    },
+    "reorderModalMergeButton": {
+      "name": "Modal merge button",
+      "primary": ".auc-modal button:has-text('Juntar')",
+      "fallbacks": [
+        "[role='dialog'] button:has-text('Juntar')",
+        ".modal button:has-text('merge')",
+        ".auc-modal button.auc-button--secondary"
+      ],
+      "score": 50,
+      "reason": "Text-based button in modal (i18n fragile)",
+      "verified": false,
+      "notes": "Merges order items with existing cart contents"
+    },
+    "reorderModalCloseButton": {
+      "name": "Modal close button",
+      "primary": ".auc-modal button[aria-label='Close']",
+      "fallbacks": [
+        ".auc-modal .close",
+        "[role='dialog'] button:has-text('×')",
+        ".auc-modal button.auc-modal__close"
+      ],
+      "score": 60,
+      "reason": "Aria-label based selector",
+      "verified": false,
+      "notes": "Closes modal without action"
     }
   },
   "navigation": {

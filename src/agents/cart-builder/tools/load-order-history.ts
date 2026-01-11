@@ -123,13 +123,17 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
         });
       }
 
-      // Get all order card elements
+      // Get all order elements
+      // The page structure is: <a href="...order-detail..."><div class="order-card">...</div></a>
+      // So we need to select the links (which wrap the cards) to get the href
+      const orderLinkSelector = resolver.resolve('order-history', 'orderLink');
       const orderCardSelector = resolver.resolve('order-history', 'orderCard');
-      if (!orderCardSelector) {
-        logger.error('Order card selector not found in registry');
+
+      if (!orderLinkSelector && !orderCardSelector) {
+        logger.error('Neither order link nor order card selector found in registry');
 
         const error: ToolError = {
-          message: 'Order card selector not registered',
+          message: 'Order card/link selector not registered',
           code: 'SELECTOR_ERROR',
           recoverable: false,
         };
@@ -141,10 +145,21 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
         };
       }
 
-      const orderCards = await page.$$(orderCardSelector);
-      const totalAvailable = orderCards.length;
+      // Try the link selector first (since links wrap cards on Auchan.pt)
+      let orderElements = orderLinkSelector ? await page.$$(orderLinkSelector) : [];
+      let usingLinks = true;
 
-      logger.info('Found order cards', { count: totalAvailable });
+      if (orderElements.length === 0 && orderCardSelector) {
+        // Fallback to card selector
+        logger.debug('No links found, falling back to card selector');
+        orderElements = await page.$$(orderCardSelector);
+        usingLinks = false;
+      }
+
+      const totalAvailable = orderElements.length;
+      logger.debug('Found order elements', { count: totalAvailable, usingLinks });
+
+      logger.info('Found order elements', { count: totalAvailable, usingLinks });
 
       if (totalAvailable === 0) {
         logger.info('No orders found in history (empty list)');
@@ -165,29 +180,76 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
       }
 
       // Limit to maxOrders
-      const cardsToProcess = orderCards.slice(0, maxOrders);
+      const elementsToProcess = orderElements.slice(0, maxOrders);
       const orders: OrderSummary[] = [];
       const warnings: string[] = [];
 
-      // Extract data from each order card
-      for (let i = 0; i < cardsToProcess.length; i++) {
-        const card = cardsToProcess[i];
-        if (!card) continue;
+      // Extract data from each order element (link or card)
+      for (let i = 0; i < elementsToProcess.length; i++) {
+        const element = elementsToProcess[i];
+        if (!element) continue;
 
         try {
-          logger.info(`Processing order card ${i + 1}/${cardsToProcess.length}`);
+          logger.info(`Processing order element ${i + 1}/${elementsToProcess.length}`);
 
           // Extract order link (for detail URL)
-          const orderLinkSelector = resolver.resolve('order-history', 'orderLink');
-          const linkElement = orderLinkSelector
-            ? await card.$(orderLinkSelector)
-            : null;
-          const detailUrl = linkElement
-            ? await linkElement.getAttribute('href')
-            : null;
+          // When usingLinks=true, the element IS the <a> tag
+          // When usingLinks=false, the element is the card div and we need to find the link
+          let detailUrl: string | null = null;
+
+          // If we selected links, get the href directly from the element
+          if (usingLinks) {
+            detailUrl = await element.getAttribute('href');
+            if (detailUrl) {
+              logger.debug(`Order element ${i + 1}: Got href from link element`, { href: detailUrl });
+            }
+          }
+
+          // If not using links or href not found, try various strategies
+          if (!detailUrl) {
+            // Strategy 1: Check if the element itself has an href
+            const elementHref = await element.getAttribute('href');
+            if (elementHref) {
+              logger.debug(`Order element ${i + 1}: Found href on element itself`, { href: elementHref });
+              detailUrl = elementHref;
+            }
+          }
+
+          // Strategy 2: Look for a link inside the element
+          if (!detailUrl) {
+            const linkSelector = orderLinkSelector || 'a[href*="detalhes-encomenda"]';
+            const linkElement = await element.$(linkSelector);
+            if (linkElement) {
+              detailUrl = await linkElement.getAttribute('href');
+              logger.debug(`Order element ${i + 1}: Found href via nested link`, { href: detailUrl });
+            }
+          }
+
+          // Strategy 3: Try to find any <a> with orderID in href
+          if (!detailUrl) {
+            const anyLink = await element.$('a[href*="orderID"]');
+            if (anyLink) {
+              detailUrl = await anyLink.getAttribute('href');
+              logger.debug(`Order element ${i + 1}: Found href via orderID pattern`, { href: detailUrl });
+            }
+          }
+
+          // Strategy 4: Just get the first <a> tag
+          if (!detailUrl) {
+            const firstLink = await element.$('a');
+            if (firstLink) {
+              const href = await firstLink.getAttribute('href');
+              if (href && (href.includes('detalhes') || href.includes('order'))) {
+                detailUrl = href;
+                logger.debug(`Order element ${i + 1}: Found href via first link fallback`, { href: detailUrl });
+              }
+            }
+          }
 
           if (!detailUrl) {
-            logger.warn(`Order card ${i + 1}: No detail URL found, skipping`);
+            // Last resort: log the element HTML to understand structure
+            const elementHtml = await element.evaluate((el) => el.outerHTML.substring(0, 500));
+            logger.warn(`Order element ${i + 1}: No detail URL found, skipping`, { elementHtmlPreview: elementHtml });
             warnings.push(`Order ${i + 1}: Missing detail URL`);
             continue;
           }
@@ -200,21 +262,21 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
           // Extract order date (from data-date attribute)
           const orderDateDaySelector = resolver.resolve('order-history', 'orderDateDay');
           const dateElement = orderDateDaySelector
-            ? await card.$(orderDateDaySelector)
+            ? await element.$(orderDateDaySelector)
             : null;
           const dateAttr = dateElement
             ? await dateElement.getAttribute('data-date')
             : null;
 
           if (!dateAttr) {
-            logger.warn(`Order card ${i + 1}: No date found, skipping`);
+            logger.warn(`Order ${i + 1}: No date found, skipping`);
             warnings.push(`Order ${i + 1}: Missing date`);
             continue;
           }
 
           const orderDate = new Date(dateAttr);
           if (isNaN(orderDate.getTime())) {
-            logger.warn(`Order card ${i + 1}: Invalid date format: ${dateAttr}`);
+            logger.warn(`Order ${i + 1}: Invalid date format: ${dateAttr}`);
             warnings.push(`Order ${i + 1}: Invalid date`);
             continue;
           }
@@ -222,7 +284,7 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
           // Extract order number/ID
           const orderNumberSelector = resolver.resolve('order-history', 'orderNumber');
           const numberElement = orderNumberSelector
-            ? await card.$(orderNumberSelector)
+            ? await element.$(orderNumberSelector)
             : null;
           const orderNumberText = numberElement
             ? await numberElement.textContent()
@@ -232,7 +294,7 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
             : null;
 
           if (!orderId) {
-            logger.warn(`Order card ${i + 1}: No order ID found, skipping`);
+            logger.warn(`Order ${i + 1}: No order ID found, skipping`);
             warnings.push(`Order ${i + 1}: Missing order ID`);
             continue;
           }
@@ -240,7 +302,7 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
           // Extract product count
           const productCountSelector = resolver.resolve('order-history', 'orderProductCount');
           const countElement = productCountSelector
-            ? await card.$(productCountSelector)
+            ? await element.$(productCountSelector)
             : null;
           const countText = countElement
             ? await countElement.textContent()
@@ -250,7 +312,7 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
             : null;
 
           if (productCount === null) {
-            logger.warn(`Order card ${i + 1}: Failed to parse product count: ${countText}`);
+            logger.warn(`Order ${i + 1}: Failed to parse product count: ${countText}`);
             warnings.push(`Order ${i + 1}: Invalid product count`);
             continue;
           }
@@ -258,7 +320,7 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
           // Extract total price
           const priceSelector = resolver.resolve('order-history', 'orderTotalPrice');
           const priceElement = priceSelector
-            ? await card.$(priceSelector)
+            ? await element.$(priceSelector)
             : null;
           const priceText = priceElement
             ? await priceElement.textContent()
@@ -268,7 +330,7 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
             : null;
 
           if (totalPrice === null) {
-            logger.warn(`Order card ${i + 1}: Failed to parse price: ${priceText}`);
+            logger.warn(`Order ${i + 1}: Failed to parse price: ${priceText}`);
             warnings.push(`Order ${i + 1}: Invalid price`);
             continue;
           }
@@ -284,7 +346,7 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
 
           const validated = OrderSummarySchema.safeParse(orderSummary);
           if (!validated.success) {
-            logger.warn(`Order card ${i + 1}: Schema validation failed`, {
+            logger.warn(`Order ${i + 1}: Schema validation failed`, {
               errors: validated.error.errors,
             });
             warnings.push(`Order ${i + 1}: Schema validation failed`);
@@ -292,14 +354,14 @@ export const loadOrderHistoryTool: Tool<LoadOrderHistoryInput, LoadOrderHistoryO
           }
 
           orders.push(validated.data);
-          logger.info(`Order card ${i + 1}: Successfully extracted`, {
+          logger.info(`Order ${i + 1}: Successfully extracted`, {
             orderId,
             date: orderDate.toISOString(),
             productCount,
             totalPrice,
           });
         } catch (err) {
-          logger.error(`Order card ${i + 1}: Extraction failed`, {
+          logger.error(`Order ${i + 1}: Extraction failed`, {
             error: err instanceof Error ? err.message : String(err),
           });
           warnings.push(`Order ${i + 1}: Extraction error`);

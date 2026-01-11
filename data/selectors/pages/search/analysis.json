@@ -1,0 +1,175 @@
+{
+  "pageType": "search-results",
+  "url": "https://www.auchan.pt/pt/pesquisa?q=leite",
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/pesquisa",
+  "searchQuery": "\"leite\"",
+  "resultsCount": "1,059 resultados para:",
+  "productTileSelector": ".auc-product-tile",
+  "productTileCount": 72,
+  "sampleProduct": {
+    "pid": "3010403",
+    "name": "leite auchan uht meio gordo slim 1l",
+    "imageSrc": "https://www.auchan.pt/dw/image/v2/BFRC_PRD/on/demandware.static/-/Sites-auchan-pt-master-catalog/default/dw8f69a726/images/hi-res/003010403.jpg?sw=250&sh=250&sm=fit&bgcolor=FFFFFF",
+    "imageAlt": "LEITE AUCHAN UHT MEIO GORDO SLIM 1L",
+    "price": "0,86 €",
+    "hasRating": true,
+    "labelCount": 1,
+    "hasQuantitySelector": true,
+    "addButtonText": "",
+    "hasWishlist": true
+  },
+  "selectors": {
+    "resultsContainer": {
+      "primary": ".product-grid",
+      "fallbacks": [
+        ".auc-product",
+        ".search-results"
+      ],
+      "score": 75,
+      "notes": "Main container for search results"
+    },
+    "resultsCount": {
+      "primary": ".search-result-count",
+      "fallbacks": [
+        ".auc-search-results",
+        ".auc-js-search-results-count"
+      ],
+      "score": 70,
+      "notes": "Displays total number of results"
+    },
+    "searchKeywords": {
+      "primary": ".search-keywords",
+      "fallbacks": [],
+      "score": 70,
+      "notes": "Displays the search query"
+    },
+    "productTile": {
+      "primary": ".auc-product-tile",
+      "fallbacks": [
+        ".auc-js-product-tile",
+        "[data-pid]"
+      ],
+      "score": 85,
+      "notes": "Individual product card. Has data-pid attribute with product ID"
+    },
+    "productName": {
+      "primary": ".auc-product-tile__name",
+      "fallbacks": [
+        ".auc-product-tile .product-name"
+      ],
+      "score": 80,
+      "notes": "Product name/title within product tile"
+    },
+    "productImage": {
+      "primary": ".auc-product-tile__image-container__image img",
+      "fallbacks": [
+        ".auc-product-tile img[alt]"
+      ],
+      "score": 75,
+      "notes": "Product image within tile"
+    },
+    "productImageContainer": {
+      "primary": ".auc-product-tile__image-container",
+      "fallbacks": [
+        ".product-image"
+      ],
+      "score": 75,
+      "notes": "Container for product image"
+    },
+    "productPrice": {
+      "primary": ".auc-product-tile__prices .price",
+      "fallbacks": [
+        ".auc-product-tile .price",
+        "[class*=\"price\"]"
+      ],
+      "score": 80,
+      "notes": "Product price element"
+    },
+    "productPriceContainer": {
+      "primary": ".auc-product-tile__prices",
+      "fallbacks": [
+        ".price-container"
+      ],
+      "score": 75,
+      "notes": "Container for price information"
+    },
+    "productRating": {
+      "primary": ".auc-product-tile__bazaarvoice--ratings",
+      "fallbacks": [
+        ".ratings",
+        "[class*=\"rating\"]"
+      ],
+      "score": 70,
+      "notes": "Product rating/reviews (may not be present for all products)"
+    },
+    "productLabels": {
+      "primary": ".auc-product-tile__labels",
+      "fallbacks": [
+        ".product-labels",
+        ".auc-product-labels"
+      ],
+      "score": 75,
+      "notes": "Container for promotional badges/labels"
+    },
+    "productQuantitySelector": {
+      "primary": ".auc-product-tile__quantity-selector",
+      "fallbacks": [
+        ".quantity-selector"
+      ],
+      "score": 75,
+      "notes": "Quantity selection and add to cart controls"
+    },
+    "addToCartButton": {
+      "primary": ".auc-product-tile__quantity-selector button",
+      "fallbacks": [
+        "button[class*=\"add\"]",
+        "button:has-text(\"Adicionar\")"
+      ],
+      "score": 70,
+      "notes": "Add to cart button within product tile"
+    },
+    "wishlistButton": {
+      "primary": ".auc-product__add-to-wishlist__button",
+      "fallbacks": [
+        ".auc-js-product-add-to-wishlist",
+        "[class*=\"wishlist\"]"
+      ],
+      "score": 75,
+      "notes": "Add to wishlist button"
+    },
+    "productMeasures": {
+      "primary": ".auc-product-tile__measures",
+      "fallbacks": [
+        ".product-measures"
+      ],
+      "score": 70,
+      "notes": "Product unit/measure information (e.g., \"1L\", \"500g\")"
+    },
+    "productNotes": {
+      "primary": ".auc-product-tile__notes",
+      "fallbacks": [
+        ".product-notes"
+      ],
+      "score": 65,
+      "notes": "Additional product notes or information"
+    },
+    "productPromoBadges": {
+      "primary": ".auc-product-tile__promo-badges",
+      "fallbacks": [
+        ".promo-badges",
+        "[class*=\"promo\"]"
+      ],
+      "score": 70,
+      "notes": "Promotional badge container"
+    },
+    "unavailableIndicator": {
+      "primary": ".auc-product-tile--unavailable",
+      "fallbacks": [
+        ".auc-product-tile[class*=\"unavailable\"]",
+        ".auc-product-tile button[disabled]"
+      ],
+      "score": 65,
+      "notes": "Indicates product is out of stock (class modifier or disabled button)"
+    }
+  }
+}

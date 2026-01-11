@@ -15,6 +15,7 @@ import type { Tool, ToolResult, ToolError } from '../../../types/tool.js';
 import type { ScanCartInput, ScanCartOutput } from './types.js';
 import type { CartSnapshot, CartItem } from '../types.js';
 import { createSelectorResolver } from '../../../selectors/resolver.js';
+import { dismissSubscriptionPopup } from '../../../utils/popup-handler.js';
 
 /**
  * Default cart URL
@@ -80,6 +81,12 @@ export const scanCartTool: Tool<ScanCartInput, ScanCartOutput> = {
         await context.page.waitForTimeout(2000);
       } else {
         context.logger.debug('Already on cart page');
+      }
+
+      // Dismiss any subscription/notification popups
+      const popupDismissed = await dismissSubscriptionPopup(context.page, { logger: context.logger });
+      if (popupDismissed) {
+        context.logger.info('Dismissed subscription popup on cart page');
       }
 
       const finalUrl = context.page.url();

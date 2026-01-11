@@ -149,12 +149,35 @@ export class CartBuilder {
       logs.push(`Selected ${selectedOrders.length} orders to load`);
 
       // Step 5: Load orders into cart using reorder button
-      const orderDetails = await this.reorderSelectedOrders(toolContext, selectedOrders);
-      logs.push(`Loaded ${orderDetails.length} orders into cart`);
+      const { orderDetails, successCount, failureCount } = await this.reorderSelectedOrders(
+        toolContext,
+        selectedOrders
+      );
+      logs.push(`Processed ${orderDetails.length} orders: ${successCount} succeeded, ${failureCount} failed`);
+
+      // CRITICAL: Verify at least one order was successfully reordered
+      if (successCount === 0 && selectedOrders.length > 0) {
+        throw new Error(
+          `All ${selectedOrders.length} reorder attempts failed. Cart may be empty.`
+        );
+      }
 
       // Step 6: Capture final cart state
       const cartAfter = await this.captureCartSnapshot(toolContext);
       logs.push(`Final cart: ${cartAfter.itemCount} items, €${cartAfter.totalPrice.toFixed(2)}`);
+
+      // CRITICAL: Verify cart is not empty after reordering
+      if (cartAfter.itemCount === 0 && successCount > 0) {
+        logger.error('Cart is empty despite successful reorder attempts', {
+          successCount,
+          failureCount,
+          cartBeforeCount: cartBefore.itemCount,
+          cartAfterCount: cartAfter.itemCount,
+        });
+        throw new Error(
+          `Cart is empty after ${successCount} "successful" reorders. Something went wrong with cart state.`
+        );
+      }
 
       // Step 7: Compute diff
       const diff = this.computeDiff(cartBefore, cartAfter);
@@ -274,17 +297,42 @@ export class CartBuilder {
   /**
    * Load selected orders into cart using reorder button.
    * Uses LoadOrderDetailTool and ReorderTool.
+   *
+   * Processes orders from oldest to newest:
+   * - First order uses 'replace' mode (replaces cart contents)
+   * - Subsequent orders use 'merge' mode (adds to existing cart)
+   *
+   * User flow: oldest order first → replace cart, then merge remaining orders
+   *
+   * @returns Object with orderDetails, successCount, and failureCount
    */
   private async reorderSelectedOrders(
     toolContext: ToolContext,
     orders: OrderSummary[]
-  ): Promise<OrderDetail[]> {
+  ): Promise<{ orderDetails: OrderDetail[]; successCount: number; failureCount: number }> {
     const orderDetails: OrderDetail[] = [];
+    let successCount = 0;
+    let failureCount = 0;
 
-    for (const order of orders) {
-      toolContext.logger.info('Processing order for reorder', { orderId: order.orderId });
+    // Process orders from oldest to newest (reverse order)
+    // First order replaces cart, subsequent orders merge
+    const ordersToProcess = [...orders].reverse();
 
-      // Load order detail
+    for (let i = 0; i < ordersToProcess.length; i++) {
+      const order = ordersToProcess[i];
+      if (!order) continue;
+
+      const isFirstOrder = i === 0;
+      const mergeMode = isFirstOrder ? 'replace' : 'merge';
+
+      toolContext.logger.info('Processing order for reorder', {
+        orderId: order.orderId,
+        orderIndex: i + 1,
+        totalOrders: ordersToProcess.length,
+        mergeMode,
+      });
+
+      // Load order detail (optional - for reporting)
       const detailResult = await loadOrderDetailTool.execute(
         {
           orderId: order.orderId,
@@ -294,40 +342,56 @@ export class CartBuilder {
         toolContext
       );
 
-      if (!detailResult.success || !detailResult.data) {
-        toolContext.logger.warn('Failed to load order detail', {
+      if (detailResult.success && detailResult.data) {
+        orderDetails.push(detailResult.data.order);
+      } else {
+        toolContext.logger.warn('Failed to load order detail (continuing with reorder)', {
           orderId: order.orderId,
           error: detailResult.error?.message,
         });
-        continue;
+        // Don't fail the whole process - detail loading is for reporting only
       }
 
-      orderDetails.push(detailResult.data.order);
-
-      // Click reorder button
+      // Click reorder button with appropriate merge mode
       const reorderResult = await reorderTool.execute(
         {
           orderId: order.orderId,
           detailUrl: order.detailUrl,
+          mergeMode,
         },
         toolContext
       );
 
       if (!reorderResult.success) {
-        toolContext.logger.warn('Failed to reorder', {
+        failureCount++;
+        toolContext.logger.error('REORDER FAILED', {
           orderId: order.orderId,
           error: reorderResult.error?.message,
+          errorCode: reorderResult.error?.code,
+          orderIndex: i + 1,
+          totalOrders: ordersToProcess.length,
         });
-        // Continue to try other orders
+        // Continue to try other orders, but track the failure
       } else {
+        successCount++;
         toolContext.logger.info('Order reordered successfully', {
           orderId: order.orderId,
           itemsAdded: reorderResult.data?.itemsAdded,
+          mergeMode,
+          orderIndex: i + 1,
+          totalOrders: ordersToProcess.length,
         });
       }
     }
 
-    return orderDetails;
+    toolContext.logger.info('Reorder batch completed', {
+      totalOrders: ordersToProcess.length,
+      successCount,
+      failureCount,
+      orderDetailsExtracted: orderDetails.length,
+    });
+
+    return { orderDetails, successCount, failureCount };
   }
 
   /**

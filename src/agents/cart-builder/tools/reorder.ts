@@ -16,6 +16,7 @@
 import type { Tool, ToolResult, ToolContext } from '../../../types/tool.js';
 import type { ReorderInput, ReorderOutput } from './types.js';
 import { createSelectorResolver } from '../../../selectors/resolver.js';
+import { dismissPopups } from '../../../utils/popup-handler.js';
 
 /**
  * Maximum wait time for cart update after reorder (ms)
@@ -23,9 +24,94 @@ import { createSelectorResolver } from '../../../selectors/resolver.js';
 const CART_UPDATE_WAIT = 3000;
 
 /**
+ * Maximum wait time for modal to appear (ms)
+ */
+const MODAL_WAIT_TIMEOUT = 5000;
+
+/**
+ * Maximum retries for popup dismissal before critical actions
+ */
+const MAX_POPUP_DISMISS_RETRIES = 3;
+
+/**
+ * Get the current cart item count from the header cart indicator.
+ * This is used to verify cart changes before/after reorder.
+ */
+async function getCartCount(context: ToolContext): Promise<number | null> {
+  const cartCountSelectors = [
+    '.auc-header-cart__count',
+    '[data-testid="cart-count"]',
+    '.cart-counter',
+    '.cart-quantity',
+    '.badge.cart-badge',
+    // Auchan-specific: cart icon with number
+    '.auc-header-actions__cart .auc-badge',
+    '[class*="cart"] [class*="badge"]',
+    '[class*="cart"] [class*="count"]',
+  ];
+
+  for (const selector of cartCountSelectors) {
+    try {
+      const element = context.page.locator(selector).first();
+      const isVisible = await element.isVisible({ timeout: 2000 }).catch(() => false);
+
+      if (isVisible) {
+        const text = await element.textContent();
+        if (text) {
+          const count = parseInt(text.trim(), 10);
+          if (!isNaN(count)) {
+            context.logger.debug('Got cart count', { count, selector });
+            return count;
+          }
+        }
+      }
+    } catch {
+      // Try next selector
+    }
+  }
+
+  context.logger.debug('Could not get cart count from any selector');
+  return null;
+}
+
+/**
+ * Ensure no popups are blocking the page before a critical action.
+ * Retries multiple times to handle popups that may appear after dismissal.
+ */
+async function ensureNoBlockingPopups(
+  context: ToolContext,
+  actionDescription: string
+): Promise<void> {
+  context.logger.debug('Ensuring no blocking popups', { action: actionDescription });
+
+  for (let attempt = 1; attempt <= MAX_POPUP_DISMISS_RETRIES; attempt++) {
+    const dismissed = await dismissPopups(context.page, {
+      timeout: 2000,
+      verbose: true,
+      logger: context.logger,
+    });
+
+    if (dismissed === 0) {
+      context.logger.debug('No popups to dismiss', { attempt });
+      break;
+    }
+
+    context.logger.info('Dismissed popups before action', {
+      dismissed,
+      attempt,
+      action: actionDescription,
+    });
+
+    // Wait a moment for any additional popups to appear
+    await context.page.waitForTimeout(500);
+  }
+}
+
+/**
  * Reorder Tool
  *
  * Adds all items from a previous order to cart by clicking the reorder button.
+ * Handles the confirmation modal that appears asking to replace or merge cart.
  */
 export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
   name: 'reorder',
@@ -35,11 +121,13 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
     const start = Date.now();
     const resolver = createSelectorResolver();
     const screenshots: string[] = [];
+    const mergeMode = input.mergeMode ?? 'replace';
 
     try {
       context.logger.info('Starting reorder', {
         orderId: input.orderId,
         detailUrl: input.detailUrl,
+        mergeMode,
       });
 
       // Navigate to order detail page if needed
@@ -66,6 +154,13 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         context.logger.debug('Already on order detail page');
       }
 
+      // CRITICAL: Dismiss any blocking popups before attempting reorder
+      await ensureNoBlockingPopups(context, 'reorder button click');
+
+      // Get cart count BEFORE reorder to verify change later
+      const cartCountBefore = await getCartCount(context);
+      context.logger.info('Cart count before reorder', { cartCountBefore });
+
       // Find reorder button
       context.logger.debug('Looking for reorder button');
       const reorderButtonResult = await resolver.tryResolve(
@@ -89,29 +184,125 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         });
       }
 
+      // Verify reorder button is actually clickable (not obscured)
+      const isButtonVisible = await reorderButtonResult.element.isVisible();
+      const isButtonEnabled = await reorderButtonResult.element.isEnabled();
+
+      if (!isButtonVisible || !isButtonEnabled) {
+        context.logger.error('Reorder button not clickable', {
+          visible: isButtonVisible,
+          enabled: isButtonEnabled,
+        });
+
+        // Maybe a popup appeared - try to dismiss it again
+        await ensureNoBlockingPopups(context, 'reorder button recovery');
+      }
+
       // Capture screenshot before clicking
       const beforeScreenshot = await context.screenshot(`reorder-before-${input.orderId}`);
       screenshots.push(beforeScreenshot);
 
-      // Click the reorder button
+      // Click the reorder button with explicit wait and force option
       context.logger.info('Clicking reorder button');
-      await reorderButtonResult.element.click();
+      try {
+        await reorderButtonResult.element.click({ timeout: 5000 });
+      } catch (clickError) {
+        // If click failed, try dismissing popups and retry
+        context.logger.warn('First click attempt failed, retrying after popup dismissal', {
+          error: clickError instanceof Error ? clickError.message : String(clickError),
+        });
+        await ensureNoBlockingPopups(context, 'reorder button retry');
+        await reorderButtonResult.element.click({ timeout: 5000 });
+      }
+
+      // Handle the confirmation modal
+      context.logger.debug('Waiting for reorder confirmation modal');
+      const modalHandled = await handleReorderModal(context, resolver, mergeMode, screenshots, input.orderId);
+
+      if (!modalHandled) {
+        // Modal not found - this is a CRITICAL issue
+        // The reorder button should trigger a modal, if it didn't appear
+        // then the click likely didn't register
+        context.logger.error('Modal not detected - reorder may not have triggered');
+
+        // Take a diagnostic screenshot
+        const diagnosticScreenshot = await context.screenshot(`reorder-no-modal-${input.orderId}`);
+        screenshots.push(diagnosticScreenshot);
+
+        // Try clicking reorder button again after dismissing any popups
+        context.logger.info('Retrying reorder button click');
+        await ensureNoBlockingPopups(context, 'reorder retry after modal failure');
+
+        // Find the button again (it may have been re-rendered)
+        const retryButtonResult = await resolver.tryResolve(
+          context.page,
+          'order-detail',
+          'reorderButton',
+          { timeout: 3000 }
+        );
+
+        if (retryButtonResult) {
+          await retryButtonResult.element.click({ timeout: 5000 });
+          // Try modal handling again
+          const retryModalHandled = await handleReorderModal(
+            context,
+            resolver,
+            mergeMode,
+            screenshots,
+            input.orderId
+          );
+
+          if (!retryModalHandled) {
+            throw new Error(
+              'Reorder modal did not appear after multiple attempts - reorder button click may be blocked'
+            );
+          }
+        }
+      }
 
       // Wait for cart update
       context.logger.debug('Waiting for cart to update', { waitMs: CART_UPDATE_WAIT });
       await context.page.waitForTimeout(CART_UPDATE_WAIT);
 
+      // CRITICAL: Verify cart count actually changed
+      const cartCountAfter = await getCartCount(context);
+      context.logger.info('Cart count after reorder', { cartCountBefore, cartCountAfter });
+
+      // Determine if cart was successfully modified
+      let cartChanged = false;
+      let itemsDelta = 0;
+
+      if (cartCountBefore !== null && cartCountAfter !== null) {
+        itemsDelta = cartCountAfter - cartCountBefore;
+
+        if (mergeMode === 'replace') {
+          // For replace mode, cart should have items (even if count decreased)
+          cartChanged = cartCountAfter > 0;
+        } else {
+          // For merge mode, cart count should have increased
+          cartChanged = itemsDelta > 0;
+        }
+
+        if (!cartChanged) {
+          context.logger.error('Cart count did not change as expected', {
+            cartCountBefore,
+            cartCountAfter,
+            itemsDelta,
+            mergeMode,
+          });
+        }
+      } else {
+        context.logger.warn('Could not verify cart count change - count not available');
+      }
+
       // Try to detect cart update indicators
-      // This could be:
-      // 1. Cart counter update
-      // 2. Toast notification
-      // 3. Page redirect to cart
-      // 4. Loading spinner disappearing
       const updatedUrl = context.page.url();
       const redirectedToCart = updatedUrl.includes('/carrinho') || updatedUrl.includes('/cart');
 
       if (redirectedToCart) {
         context.logger.info('Redirected to cart page after reorder');
+        // If redirected to cart, assume success
+        cartChanged = true;
       }
 
       // Try to detect any error messages or unavailable item notifications
@@ -125,21 +316,48 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         });
       }
 
-      // Try to get cart item count from cart indicator if visible
-      const itemsAdded = await estimateItemsAdded(context);
-
-      // Try to get cart total if visible
-      const cartTotal = await estimateCartTotal(context);
-
       // Capture screenshot after reorder
       const afterScreenshot = await context.screenshot(`reorder-after-${input.orderId}`);
       screenshots.push(afterScreenshot);
 
-      context.logger.info('Reorder completed', {
+      // CRITICAL: If cart didn't change and we couldn't detect a redirect, fail loudly
+      if (!cartChanged && !redirectedToCart) {
+        context.logger.error('REORDER VERIFICATION FAILED: Cart was not modified', {
+          orderId: input.orderId,
+          cartCountBefore,
+          cartCountAfter,
+          mergeMode,
+          failedItems,
+        });
+
+        const verificationError: import('../../../types/tool.js').ToolError = {
+          message: `Reorder did not modify cart (before: ${cartCountBefore}, after: ${cartCountAfter})`,
+          code: 'VALIDATION_ERROR',
+          recoverable: true, // Could retry
+        };
+
+        return {
+          success: false,
+          error: verificationError,
+          screenshots,
+          duration: Date.now() - start,
+        };
+      }
+
+      // Estimate items added
+      const itemsAdded = cartCountAfter ?? itemsDelta;
+
+      // Try to get cart total if visible
+      const cartTotal = await estimateCartTotal(context);
+
+      context.logger.info('Reorder completed successfully', {
         orderId: input.orderId,
+        cartCountBefore,
+        cartCountAfter,
         itemsAdded,
         failedItemsCount: failedItems.length,
         cartTotal,
+        cartChanged,
       });
 
       return {
@@ -187,6 +405,140 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
 };
 
 /**
+ * Handle the reorder confirmation modal.
+ *
+ * After clicking the reorder button, a modal appears asking whether to:
+ * - Replace cart contents (click 'Encomendar de novo' in modal)
+ * - Merge with existing cart (click 'Juntar' button)
+ *
+ * @param context - Tool context
+ * @param resolver - Selector resolver
+ * @param mergeMode - 'replace' to click confirm reorder, 'merge' to click merge
+ * @param screenshots - Array to append screenshots to
+ * @param orderId - Order ID for screenshot naming
+ * @returns Whether the modal was successfully handled
+ */
+async function handleReorderModal(
+  context: ToolContext,
+  resolver: ReturnType<typeof createSelectorResolver>,
+  mergeMode: 'replace' | 'merge',
+  screenshots: string[],
+  orderId: string
+): Promise<boolean> {
+  try {
+    // Wait for modal to appear
+    context.logger.debug('Waiting for modal to appear', { timeout: MODAL_WAIT_TIMEOUT });
+
+    // Try to find the modal using multiple strategies
+    const modalSelectors = [
+      '.auc-modal[data-visible="true"]',
+      '.modal.show',
+      '[role="dialog"][aria-modal="true"]',
+      '.auc-modal--visible',
+      '.auc-modal:visible',
+      '[class*="modal"]:visible',
+    ];
+
+    let modalFound = false;
+    for (const selector of modalSelectors) {
+      try {
+        await context.page.waitForSelector(selector, { timeout: MODAL_WAIT_TIMEOUT, state: 'visible' });
+        modalFound = true;
+        context.logger.debug('Modal found with selector', { selector });
+        break;
+      } catch {
+        // Try next selector
+      }
+    }
+
+    if (!modalFound) {
+      context.logger.warn('Modal not found with any selector, trying generic approach');
+      // Give it a moment and check if any dialog appeared
+      await context.page.waitForTimeout(1000);
+    }
+
+    // Capture screenshot of modal
+    const modalScreenshot = await context.screenshot(`reorder-modal-${orderId}`);
+    screenshots.push(modalScreenshot);
+
+    // CRITICAL: Dismiss any subscription/promotional popups that might overlay the modal
+    await ensureNoBlockingPopups(context, 'modal button click');
+
+    // Click the appropriate button based on merge mode
+    if (mergeMode === 'merge') {
+      // Click merge button ('Juntar')
+      context.logger.info('Clicking merge button in modal');
+      const mergeButtonResult = await resolver.tryResolve(
+        context.page,
+        'order-detail',
+        'reorderModalMergeButton',
+        { timeout: 3000 }
+      );
+
+      if (mergeButtonResult) {
+        await mergeButtonResult.element.click();
+        context.logger.info('Merge button clicked');
+        return true;
+      }
+
+      // Fallback: try direct text search
+      const mergeButtonFallback = context.page.locator('button:has-text("Juntar")').first();
+      if (await mergeButtonFallback.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await mergeButtonFallback.click();
+        context.logger.info('Merge button clicked (fallback)');
+        return true;
+      }
+
+      context.logger.warn('Merge button not found, trying confirm button instead');
+    }
+
+    // Click confirm reorder button ('Encomendar de novo')
+    context.logger.info('Clicking confirm reorder button in modal');
+    const confirmButtonResult = await resolver.tryResolve(
+      context.page,
+      'order-detail',
+      'reorderModalConfirmButton',
+      { timeout: 3000 }
+    );
+
+    if (confirmButtonResult) {
+      await confirmButtonResult.element.click();
+      context.logger.info('Confirm reorder button clicked');
+      return true;
+    }
+
+    // Fallback: try direct text searches
+    const confirmButtonSelectors = [
+      'button:has-text("Encomendar de novo")',
+      'button:has-text("Confirmar")',
+      '.modal button.btn-primary',
+      '[role="dialog"] button:first-of-type',
+    ];
+
+    for (const selector of confirmButtonSelectors) {
+      try {
+        const btn = context.page.locator(selector).first();
+        if (await btn.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await btn.click();
+          context.logger.info('Confirm button clicked (fallback)', { selector });
+          return true;
+        }
+      } catch {
+        // Try next selector
+      }
+    }
+
+    context.logger.warn('Could not find any modal button to click');
+    return false;
+  } catch (err) {
+    context.logger.warn('Error handling modal', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+/**
  * Detect error messages on the page after reorder attempt
  */
 async function detectErrorMessages(context: ToolContext): Promise<string[]> {
@@ -220,43 +572,6 @@ async function detectErrorMessages(context: ToolContext): Promise<string[]> {
   }
 
   return errorMessages;
-}
-
-/**
- * Try to estimate how many items were added based on cart indicator
- */
-async function estimateItemsAdded(context: ToolContext): Promise<number> {
-  // Try common cart counter selectors
-  const cartCounterSelectors = [
-    '.cart-counter',
-    '.cart-quantity',
-    '.auc-header-cart__count',
-    '[data-testid="cart-count"]',
-    '.badge.cart-badge',
-  ];
-
-  for (const selector of cartCounterSelectors) {
-    try {
-      const element = context.page.locator(selector).first();
-      const isVisible = await element.isVisible({ timeout: 1000 }).catch(() => false);
-
-      if (isVisible) {
-        const text = await element.textContent();
-        if (text) {
-          const count = parseInt(text.trim(), 10);
-          if (!isNaN(count)) {
-            context.logger.debug('Detected cart item count', { count, selector });
-            return count;
-          }
-        }
-      }
-    } catch {
-      // Try next selector
-    }
-  }
-
-  // Could not detect count
-  return 0;
 }
 
 /**

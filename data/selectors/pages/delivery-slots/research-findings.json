@@ -1,0 +1,75 @@
+{
+  "researchDate": "2026-01-11",
+  "status": "partial-automated-manual-required",
+  "automatedProgress": "60%",
+  "urls": {
+    "cart": "https://www.auchan.pt/pt/carrinho-compras",
+    "checkoutEntry": "https://www.auchan.pt/pt/aproveite-ainda",
+    "deliverySlots": "UNKNOWN - manual research required"
+  },
+  "checkoutFlow": {
+    "cartToCheckout": {
+      "buttonSelectors": [
+        ".checkout-btn",
+        ".auc-js-confirm-cart"
+      ],
+      "buttonAttributes": {
+        "data-url": "https://www.auchan.pt/pt/aproveite-ainda",
+        "data-url-validation": "https://www.auchan.pt/on/demandware.store/Sites-AuchanPT-Site/pt_PT/Cart-Validate"
+      },
+      "blockers": [
+        "Button disabled by client-side validation",
+        "Minimum order value likely not met",
+        "Possible delivery area/postcode validation required"
+      ]
+    }
+  },
+  "slotDisplay": {
+    "format": "UNKNOWN - manual research required",
+    "dateRange": "UNKNOWN - manual research required",
+    "timeSlotFormat": "UNKNOWN - manual research required"
+  },
+  "constraints": {
+    "minimumOrderValue": "UNKNOWN - estimated 30-50 EUR based on typical grocery delivery",
+    "deliveryAreaRequired": "UNKNOWN - likely requires valid postcode",
+    "notes": "Checkout blocked - manual research needed to determine actual constraints"
+  },
+  "selectors": {
+    "cart": {
+      "checkoutButton": {
+        "description": "Proceed to checkout button on cart page",
+        "candidates": [
+          ".checkout-btn",
+          ".auc-js-confirm-cart"
+        ],
+        "verified": true,
+        "notes": "Button may be disabled until validation conditions met"
+      }
+    },
+    "deliverySlots": "AWAITING MANUAL RESEARCH"
+  },
+  "screenshots": [
+    "C:\\Users\\rcoelho\\Desktop\\ai-shopping-copilot\\data\\selectors\\pages\\delivery-slots\\snapshots\\cart-before-checkout-2026-01-11T22-29-52-585Z.png",
+    "C:\\Users\\rcoelho\\Desktop\\ai-shopping-copilot\\data\\selectors\\pages\\delivery-slots\\snapshots\\final-page-2026-01-11T22-29-56-764Z.png"
+  ],
+  "htmlSnapshots": [
+    "C:\\Users\\rcoelho\\Desktop\\ai-shopping-copilot\\data\\selectors\\pages\\delivery-slots\\snapshots\\cart-before-checkout-2026-01-11T22-29-52-585Z.html",
+    "C:\\Users\\rcoelho\\Desktop\\ai-shopping-copilot\\data\\selectors\\pages\\delivery-slots\\snapshots\\final-page-2026-01-11T22-29-56-764Z.html"
+  ],
+  "notes": [
+    "Automated research completed for login, cart, and checkout button discovery",
+    "Checkout flow blocked by validation - button remains disabled",
+    "Manual user intervention required to complete research",
+    "See MANUAL_RESEARCH_GUIDE.md for instructions",
+    "See RESEARCH_STATUS.md for progress summary",
+    "Next step: User must manually add sufficient items to cart and proceed to checkout"
+  ],
+  "nextSteps": [
+    "User: Follow MANUAL_RESEARCH_GUIDE.md",
+    "User: Add ~40-50 EUR worth of items to cart",
+    "User: Complete checkout and document delivery slot UI",
+    "Dev: Create delivery-slots/v1.json with captured selectors",
+    "Dev: Update registry.json to include delivery-slots page",
+    "Dev: Implement SlotScoutTool using discovered selectors"
+  ]
+}

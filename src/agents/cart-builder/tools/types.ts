@@ -91,6 +91,13 @@ export const ReorderInputSchema = z.object({
   orderId: z.string().min(1),
   /** Order detail URL */
   detailUrl: z.string().url(),
+  /**
+   * How to handle existing cart items when reordering.
+   * - 'replace': Replace cart contents (first order or empty cart)
+   * - 'merge': Add items to existing cart (subsequent orders)
+   * Default: 'replace'
+   */
+  mergeMode: z.enum(['replace', 'merge']).default('replace'),
 });
 
 export type ReorderInput = z.input<typeof ReorderInputSchema>;

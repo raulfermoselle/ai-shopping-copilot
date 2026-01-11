@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "lastValidated": "2026-01-11T17:45:00Z",
+  "lastValidated": "2026-01-11T22:30:00Z",
   "pages": {
     "login": {
       "name": "Login Page",
@@ -48,6 +48,40 @@
         "failedSelectors": []
       },
       "notes": "Shopping cart page. Empty cart verified. Item selectors based on Auchan patterns but NOT YET VERIFIED with actual cart items."
+    },
+    "search": {
+      "name": "Product Search Results",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/pesquisa",
+      "activeVersion": 1,
+      "versions": [1],
+      "lastValidation": {
+        "timestamp": "2026-01-11T22:30:00Z",
+        "status": "valid",
+        "failedSelectors": [
+          "unavailableIndicator"
+        ]
+      },
+      "notes": "Product search results page. Shows grid of product tiles. URL format: /pt/pesquisa?q={query}. Tested with queries 'leite' and 'azeite'. unavailableIndicator NOT VERIFIED (no out-of-stock products in test results)."
+    },
+    "product-detail": {
+      "name": "Product Detail Page",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/.*\\.html$",
+      "activeVersion": 1,
+      "versions": [1],
+      "lastValidation": {
+        "timestamp": "2026-01-11T22:30:00Z",
+        "status": "partial",
+        "failedSelectors": [
+          "unavailableIndicator",
+          "productId",
+          "reviewsSection",
+          "quantityInput",
+          "wishlistButton",
+          "breadcrumbs",
+          "productCategory"
+        ]
+      },
+      "notes": "Product detail page with full information and recommendations. URL format: /pt/{category-path}/{product-slug}/{pid}.html. Tested with leite and azeite products. Shows 'A Auchan sugere isto...' recommendations section with similar products. Several selectors NOT VERIFIED (only tested with available products)."
     }
   }
 }

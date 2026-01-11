@@ -1,0 +1,246 @@
+{
+  "schemaVersion": "1.0.0",
+  "page": "product-detail",
+  "version": 1,
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/.*\\.html$",
+  "lastValidated": "2026-01-11T22:30:00Z",
+  "notes": "Product detail page. Shows single product with full information, images, description, and recommendations. URL format: /pt/{category-path}/{product-slug}/{pid}.html",
+  "selectors": {
+    "productName": {
+      "name": "Product name/title",
+      "primary": ".product-name",
+      "fallbacks": [
+        "h1.product-name",
+        "h1"
+      ],
+      "score": 80,
+      "reason": "Semantic class with tag fallback",
+      "verified": true,
+      "notes": "Main product title (h1 element)"
+    },
+    "productId": {
+      "name": "Product ID from URL",
+      "primary": "meta[property='product:retailer_item_id']",
+      "fallbacks": [
+        "[data-pid]",
+        "URL parsing: /(\\d+)\\.html$/"
+      ],
+      "score": 85,
+      "reason": "Meta tag or data attribute",
+      "verified": false,
+      "notes": "Extract from meta tag, data attribute, or parse from URL (e.g., '3010403.html' -> '3010403'). NOT VERIFIED meta tag."
+    },
+    "productPrice": {
+      "name": "Product price",
+      "primary": ".price",
+      "fallbacks": [
+        ".product-price",
+        "[class*='price']:not([class*='old'])"
+      ],
+      "score": 75,
+      "reason": "Semantic class naming",
+      "verified": true,
+      "notes": "Current product price. Parse first line of textContent for clean value."
+    },
+    "addToCartButton": {
+      "name": "Add to cart button",
+      "primary": "button.auc-js-add-to-cart",
+      "fallbacks": [
+        "button:has-text('Adicionar')",
+        "button[class*='add-to-cart']"
+      ],
+      "score": 75,
+      "reason": "JS hook class with text fallback",
+      "verified": true,
+      "notes": "Main add to cart button. Classes: auc-button__rounded auc-button__rounded--primary auc-js-add-to-cart. Check disabled state for availability."
+    },
+    "availability": {
+      "name": "Product availability indicator",
+      "primary": ".availability",
+      "fallbacks": [
+        "[class*='availability']",
+        "[class*='stock']"
+      ],
+      "score": 70,
+      "reason": "Semantic class naming",
+      "verified": true,
+      "notes": "Availability information container. May be empty if always available. Check button disabled state as primary availability indicator."
+    },
+    "unavailableIndicator": {
+      "name": "Out of stock indicator",
+      "primary": "text=/esgotado/i",
+      "fallbacks": [
+        "text=/indisponível/i",
+        ".out-of-stock",
+        "button[disabled].auc-js-add-to-cart"
+      ],
+      "score": 70,
+      "reason": "Text content or disabled button state",
+      "verified": false,
+      "notes": "Portuguese text for 'out of stock' (esgotado) or 'unavailable' (indisponível). NOT VERIFIED - only tested with available products."
+    },
+    "productDescription": {
+      "name": "Product description section",
+      "primary": ".product-description",
+      "fallbacks": [
+        "[class*='description']",
+        ".product-info"
+      ],
+      "score": 70,
+      "reason": "Semantic class naming",
+      "verified": true,
+      "notes": "Full product description text"
+    },
+    "productImages": {
+      "name": "Product images",
+      "primary": ".product-detail img, .product-image img",
+      "fallbacks": [
+        "[class*='product'] img[src*='image']",
+        ".primary-image img"
+      ],
+      "score": 70,
+      "reason": "Structural selector",
+      "verified": true,
+      "notes": "Product images (may be multiple for gallery). Primary image usually shown first."
+    },
+    "productRating": {
+      "name": "Product rating display",
+      "primary": ".bazaarvoice-ratings",
+      "fallbacks": [
+        "[class*='rating']",
+        ".ratings"
+      ],
+      "score": 70,
+      "reason": "Third-party integration class",
+      "verified": true,
+      "notes": "BazaarVoice ratings display. May include star rating and review count."
+    },
+    "reviewsSection": {
+      "name": "Customer reviews section",
+      "primary": "#BVRRContainer",
+      "fallbacks": [
+        "[class*='review']",
+        ".reviews"
+      ],
+      "score": 75,
+      "reason": "BazaarVoice container ID",
+      "verified": false,
+      "notes": "BazaarVoice reviews container. NOT VERIFIED."
+    },
+    "recommendationsSection": {
+      "name": "Recommendations section (similar products)",
+      "primary": "[class*='recommend']",
+      "fallbacks": [
+        "[class*='similar']",
+        "[class*='related']",
+        "h2:has-text('sugere'), h3:has-text('sugere')"
+      ],
+      "score": 65,
+      "reason": "Class pattern or heading text",
+      "verified": true,
+      "notes": "Section containing recommended/similar products. Heading often says 'A Auchan sugere isto...' (Auchan suggests this...)"
+    },
+    "recommendationProducts": {
+      "name": "Recommended product tiles",
+      "primary": "[class*='recommend'] .auc-product-tile",
+      "fallbacks": [
+        "[class*='similar'] .auc-product-tile",
+        "[class*='related'] .product-tile"
+      ],
+      "score": 70,
+      "reason": "Product tile within recommendation section",
+      "verified": true,
+      "notes": "Individual product tiles in recommendations section. Same structure as search results product tiles."
+    },
+    "quantityInput": {
+      "name": "Quantity input field",
+      "primary": "input[type='number'][name*='quantity']",
+      "fallbacks": [
+        ".quantity input",
+        "input.quantity"
+      ],
+      "score": 75,
+      "reason": "Semantic input type with name attribute",
+      "verified": false,
+      "notes": "Quantity input for adding to cart. NOT VERIFIED."
+    },
+    "wishlistButton": {
+      "name": "Add to wishlist button",
+      "primary": ".auc-product__add-to-wishlist__button",
+      "fallbacks": [
+        "button[class*='wishlist']",
+        "[aria-label*='wishlist']"
+      ],
+      "score": 75,
+      "reason": "BEM naming",
+      "verified": false,
+      "notes": "Add to wishlist button. NOT VERIFIED on detail page."
+    },
+    "breadcrumbs": {
+      "name": "Breadcrumb navigation",
+      "primary": ".breadcrumb",
+      "fallbacks": [
+        "nav[aria-label*='breadcrumb']",
+        "[class*='breadcrumb']"
+      ],
+      "score": 75,
+      "reason": "Semantic class or ARIA label",
+      "verified": false,
+      "notes": "Breadcrumb trail showing category hierarchy. NOT VERIFIED."
+    },
+    "productCategory": {
+      "name": "Product category from breadcrumbs",
+      "primary": ".breadcrumb li:last-child",
+      "fallbacks": [
+        ".breadcrumb-item:last-child"
+      ],
+      "score": 70,
+      "reason": "Last breadcrumb item",
+      "verified": false,
+      "notes": "Extract category from last breadcrumb item. NOT VERIFIED."
+    }
+  },
+  "navigation": {
+    "addToCart": {
+      "description": "Add product to cart",
+      "action": "click",
+      "selector": "addToCartButton",
+      "waitFor": "networkidle or cart modal",
+      "notes": "May trigger modal confirmation or inline feedback. Check cart count update."
+    },
+    "viewRecommendation": {
+      "description": "Navigate to recommended product",
+      "action": "click",
+      "selector": "recommendationProducts link/image",
+      "waitFor": "domcontentloaded",
+      "expectedUrl": "^https://(www\\.)?auchan\\.pt/pt/.*\\.html$"
+    }
+  },
+  "extraction": {
+    "productInfo": {
+      "description": "Extract complete product information",
+      "fields": {
+        "pid": "productId (from meta tag or URL)",
+        "name": "productName (text content)",
+        "price": "productPrice (parse currency)",
+        "available": "NOT unavailableIndicator AND addToCartButton:not([disabled]) (boolean)",
+        "imageUrl": "productImages [src] (first or all)",
+        "description": "productDescription (text content)",
+        "hasRating": "productRating (boolean - exists check)",
+        "category": "productCategory or breadcrumbs parsing"
+      }
+    },
+    "recommendations": {
+      "description": "Extract recommended/similar products",
+      "container": "recommendationsSection",
+      "item": "recommendationProducts",
+      "fields": {
+        "pid": "[data-pid] attribute",
+        "name": ".auc-product-tile__name (text content)",
+        "price": ".price (parse currency)",
+        "imageUrl": "img [src]",
+        "productUrl": "a [href]"
+      }
+    }
+  }
+}

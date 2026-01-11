@@ -11,6 +11,7 @@ import type {
   NavigateToOrderHistoryOutput,
 } from './types.js';
 import { createSelectorResolver } from '../../../selectors/resolver.js';
+import { dismissSubscriptionPopup } from '../../../utils/popup-handler.js';
 
 const ORDER_HISTORY_URL = 'https://www.auchan.pt/pt/historico-encomendas';
 const AUTH_REDIRECT_PATTERN = /\/pt\/login/i;
@@ -186,6 +187,12 @@ export const navigateToOrderHistoryTool: Tool<
                 fallbackIndex: containerResult.fallbackIndex,
               });
             }
+          }
+
+          // Dismiss any subscription/notification popups that may appear
+          const popupDismissed = await dismissSubscriptionPopup(page, { logger });
+          if (popupDismissed) {
+            logger.info('Dismissed subscription popup after navigation');
           }
 
           // Success
