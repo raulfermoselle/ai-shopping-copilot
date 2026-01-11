@@ -19,8 +19,8 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Logs
-logs/
+# Logs (but not Sprints/Logs which is documentation)
+/logs/
 *.log
 npm-debug.log*
 
