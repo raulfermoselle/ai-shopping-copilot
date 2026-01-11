@@ -30,10 +30,10 @@ export const LOGIN_SELECTORS = {
   loginLink: 'a[href*="Login-OAuthLogin"]',
 
   // Login form (Salesforce OAuth page)
-  emailInput: 'input[type="email"], input[name="email"], input[name="username"], #username, input[placeholder*="email" i]',
-  passwordInput: 'input[type="password"], input[name="password"], #password',
+  emailInput: '#uname1, input[type="email"], input[name="uname1"], input[name="username"], input[name="email"]',
+  passwordInput: '#pwd1, input[type="password"], input[name="passwordLogin"], input[name="password"]',
   submitButton:
-    'button[type="submit"], input[type="submit"], .login-button, button:has-text("Iniciar"), button:has-text("Entrar"), button:has-text("Login")',
+    '#btnSubmit_login, input[type="button"][value*="Aceda"], input.btn-success[type="button"], button:has-text("Aceda à sua conta"), input[type="submit"]',
 
   // Login state indicators
   loggedInIndicator: '.auc-header-account span:not(:has-text("Login")), [data-testid="user-menu"], .auc-header__user-name',

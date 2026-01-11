@@ -3,7 +3,9 @@
   "version": 1,
   "createdAt": "2026-01-11T00:00:00Z",
   "createdBy": "agent:manual-migration",
-  "notes": "Initial migration from hardcoded LOGIN_SELECTORS. Auchan uses OAuth via Salesforce.",
+  "lastUpdated": "2026-01-11T12:30:00Z",
+  "lastUpdatedBy": "agent:playwright-rpa-engineer",
+  "notes": "Selectors verified and updated from live page capture on 2026-01-11. Auchan uses OAuth via Salesforce with custom AJAX login.",
   "urlPattern": "^https://(www\\.)?auchan\\.pt|login\\.salesforce\\.com",
   "prerequisites": {
     "requiresAuth": false
@@ -56,43 +58,43 @@
     "emailInput": {
       "description": "Email/username input on Salesforce OAuth login form",
       "elementType": "input",
-      "primary": "#username",
+      "primary": "#uname1",
       "fallbacks": [
         "input[type=\"email\"]",
+        "input[name=\"uname1\"]",
         "input[name=\"username\"]",
-        "input[name=\"email\"]",
-        "input[placeholder*=\"email\" i]"
+        "input[name=\"email\"]"
       ],
       "strategy": "css-id",
-      "stabilityScore": 80,
-      "behaviorNotes": "Salesforce OAuth form; ID is stable"
+      "stabilityScore": 90,
+      "behaviorNotes": "Salesforce OAuth form; ID #uname1 is stable (verified 2026-01-11)"
     },
     "passwordInput": {
       "description": "Password input on login form",
       "elementType": "input",
-      "primary": "#password",
+      "primary": "#pwd1",
       "fallbacks": [
         "input[type=\"password\"]",
+        "input[name=\"passwordLogin\"]",
         "input[name=\"password\"]"
       ],
       "strategy": "css-id",
       "stabilityScore": 90,
-      "behaviorNotes": "Standard password field"
+      "behaviorNotes": "Standard password field; ID #pwd1 is stable (verified 2026-01-11)"
     },
     "submitButton": {
       "description": "Login form submit button",
-      "elementType": "button",
-      "primary": "button[type=\"submit\"]",
+      "elementType": "input",
+      "primary": "#btnSubmit_login",
       "fallbacks": [
-        "input[type=\"submit\"]",
-        ".login-button",
-        "button:has-text(\"Iniciar\")",
-        "button:has-text(\"Entrar\")",
-        "button:has-text(\"Login\")"
+        "input[type=\"button\"][value*=\"Aceda\"]",
+        "input.btn-success[type=\"button\"]",
+        "button:has-text(\"Aceda à sua conta\")",
+        "input[type=\"submit\"]"
       ],
-      "strategy": "css-class",
-      "stabilityScore": 70,
-      "behaviorNotes": "Text varies; button[type=submit] most reliable"
+      "strategy": "css-id",
+      "stabilityScore": 95,
+      "behaviorNotes": "Submit button has type='button' not 'submit'; triggers AJAX login via onclick; ID #btnSubmit_login is very stable (verified 2026-01-11)"
     },
     "loggedInIndicator": {
       "description": "Element indicating user is logged in",
