@@ -22,19 +22,22 @@ export const LOGIN_SELECTORS = {
   // Cookie consent
   cookieAcceptButton: '[data-testid="cookie-accept"], .cookie-accept, #onetrust-accept-btn-handler',
 
-  // Login navigation
-  accountButton: '[data-testid="account-button"], .auc-header__account, a[href*="login"]',
-  loginLink: '[data-testid="login-link"], a[href*="login"], .login-link',
+  // OneSignal notification subscription popup dismiss
+  notificationDismiss: '#onesignal-slidedown-cancel-button, button:has-text("Não"), button:has-text("Fechar")',
 
-  // Login form
-  emailInput: 'input[type="email"], input[name="email"], #email, input[placeholder*="email" i]',
+  // Login navigation - Auchan uses OAuth via Salesforce
+  accountButton: '.auc-header-account a[href*="Login-OAuthLogin"], .auc-header-account a:has-text("Login")',
+  loginLink: 'a[href*="Login-OAuthLogin"]',
+
+  // Login form (Salesforce OAuth page)
+  emailInput: 'input[type="email"], input[name="email"], input[name="username"], #username, input[placeholder*="email" i]',
   passwordInput: 'input[type="password"], input[name="password"], #password',
   submitButton:
-    'button[type="submit"], input[type="submit"], .login-button, button:has-text("Entrar")',
+    'button[type="submit"], input[type="submit"], .login-button, button:has-text("Iniciar"), button:has-text("Entrar"), button:has-text("Login")',
 
   // Login state indicators
-  loggedInIndicator: '[data-testid="user-menu"], .auc-header__user-name, .user-account-name',
-  loginError: '.login-error, .error-message, [role="alert"]',
+  loggedInIndicator: '.auc-header-account span:not(:has-text("Login")), [data-testid="user-menu"], .auc-header__user-name',
+  loginError: '.login-error, .error-message, [role="alert"], .slds-form-element__help',
 } as const;
 
 /**
@@ -101,7 +104,7 @@ export class LoginTool extends BaseTool<LoginInput, LoginResult> {
       return result;
     }
 
-    // Navigate to login page
+    // Navigate to login page (with popup handling)
     await this.navigateToLogin(context);
 
     // Capture screenshot before login
@@ -175,6 +178,36 @@ export class LoginTool extends BaseTool<LoginInput, LoginResult> {
   }
 
   /**
+   * Dismiss any notification/subscription popups (OneSignal, etc.)
+   */
+  private async dismissPopups(context: ToolContext): Promise<void> {
+    context.logger.debug('Checking for notification popups');
+
+    // Wait a moment for popups to potentially appear
+    await context.page.waitForTimeout(1000);
+
+    // Try multiple times as popups may appear sequentially
+    for (let i = 0; i < 3; i++) {
+      // Look for visible dismiss buttons - use specific OneSignal selector first
+      const dismissButton = context.page.locator(LOGIN_SELECTORS.notificationDismiss).first();
+
+      try {
+        // Only click if visible
+        if (await dismissButton.isVisible({ timeout: 3000 })) {
+          context.logger.info('Dismissing notification popup');
+          await dismissButton.click({ timeout: 5000 });
+          await context.page.waitForTimeout(500);
+        } else {
+          break;
+        }
+      } catch {
+        // No more visible popups
+        break;
+      }
+    }
+  }
+
+  /**
    * Check if user is currently logged in
    */
   private async isLoggedIn(context: ToolContext): Promise<boolean> {
@@ -201,25 +234,40 @@ export class LoginTool extends BaseTool<LoginInput, LoginResult> {
   private async navigateToLogin(context: ToolContext): Promise<void> {
     context.logger.debug('Navigating to login page');
 
-    // Try clicking account/login button first
-    const hasAccountButton = await this.exists(context, LOGIN_SELECTORS.accountButton, {
-      timeout: 2000,
-    });
+    // Retry logic for handling popups that may block clicks
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        // First dismiss any visible popups
+        await this.dismissPopups(context);
 
-    if (hasAccountButton) {
-      await this.click(context, LOGIN_SELECTORS.accountButton);
-      await context.page.waitForTimeout(500);
+        // Try clicking account/login button
+        const accountButton = context.page.locator(LOGIN_SELECTORS.accountButton).first();
+        if (await accountButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+          context.logger.debug('Clicking account button');
+          await accountButton.click({ timeout: 5000 });
+          await context.page.waitForTimeout(500);
+        }
+
+        // Check for login link
+        const loginLink = context.page.locator(LOGIN_SELECTORS.loginLink).first();
+        if (await loginLink.isVisible({ timeout: 2000 }).catch(() => false)) {
+          context.logger.debug('Clicking login link');
+          await loginLink.click({ timeout: 5000 });
+        }
+
+        // Wait for login form to be visible
+        await this.waitForSelector(context, LOGIN_SELECTORS.emailInput, { timeout: 10000 });
+        return; // Success
+      } catch (err) {
+        context.logger.warn(`Login navigation attempt ${attempt + 1} failed, checking for popups`);
+        // Try to dismiss any popup that might have appeared
+        await this.dismissPopups(context);
+
+        if (attempt === 2) {
+          throw err; // Last attempt failed
+        }
+      }
     }
-
-    // Check for login link
-    const hasLoginLink = await this.exists(context, LOGIN_SELECTORS.loginLink, { timeout: 2000 });
-
-    if (hasLoginLink) {
-      await this.click(context, LOGIN_SELECTORS.loginLink);
-    }
-
-    // Wait for login form to be visible
-    await this.waitForSelector(context, LOGIN_SELECTORS.emailInput, { timeout: 10000 });
   }
 
   /**

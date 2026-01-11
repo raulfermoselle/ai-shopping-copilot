@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "lastValidated": "2026-01-11T00:00:00Z",
+  "pages": {
+    "login": {
+      "name": "Login Page",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt|login\\.salesforce\\.com",
+      "activeVersion": 1,
+      "versions": [1],
+      "lastValidation": {
+        "timestamp": "2026-01-11T00:00:00Z",
+        "status": "valid",
+        "failedSelectors": []
+      }
+    }
+  }
+}

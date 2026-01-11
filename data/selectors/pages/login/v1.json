@@ -1,0 +1,123 @@
+{
+  "pageId": "login",
+  "version": 1,
+  "createdAt": "2026-01-11T00:00:00Z",
+  "createdBy": "agent:manual-migration",
+  "notes": "Initial migration from hardcoded LOGIN_SELECTORS. Auchan uses OAuth via Salesforce.",
+  "urlPattern": "^https://(www\\.)?auchan\\.pt|login\\.salesforce\\.com",
+  "prerequisites": {
+    "requiresAuth": false
+  },
+  "selectors": {
+    "cookieAcceptButton": {
+      "description": "Cookie consent accept button (OneTrust banner)",
+      "elementType": "button",
+      "primary": "#onetrust-accept-btn-handler",
+      "fallbacks": [
+        "[data-testid=\"cookie-accept\"]",
+        ".cookie-accept"
+      ],
+      "strategy": "css-id",
+      "stabilityScore": 85,
+      "behaviorNotes": "OneTrust banner appears on first visit; may not appear if cookies already set"
+    },
+    "notificationDismiss": {
+      "description": "OneSignal notification subscription popup dismiss button",
+      "elementType": "button",
+      "primary": "#onesignal-slidedown-cancel-button",
+      "fallbacks": [
+        "button:has-text(\"Não\")",
+        "button:has-text(\"Fechar\")"
+      ],
+      "strategy": "css-id",
+      "stabilityScore": 80,
+      "behaviorNotes": "OneSignal popup appears after cookie consent; click 'Não' to dismiss"
+    },
+    "accountButton": {
+      "description": "Account/Login button in header",
+      "elementType": "link",
+      "primary": ".auc-header-account a[href*=\"Login-OAuthLogin\"]",
+      "fallbacks": [
+        ".auc-header-account a:has-text(\"Login\")"
+      ],
+      "strategy": "css-class",
+      "stabilityScore": 75,
+      "behaviorNotes": "Navigates to Salesforce OAuth login page"
+    },
+    "loginLink": {
+      "description": "Direct login link (OAuth redirect)",
+      "elementType": "link",
+      "primary": "a[href*=\"Login-OAuthLogin\"]",
+      "fallbacks": [],
+      "strategy": "css-class",
+      "stabilityScore": 70,
+      "behaviorNotes": "Multiple instances on page; prefer accountButton for header navigation"
+    },
+    "emailInput": {
+      "description": "Email/username input on Salesforce OAuth login form",
+      "elementType": "input",
+      "primary": "#username",
+      "fallbacks": [
+        "input[type=\"email\"]",
+        "input[name=\"username\"]",
+        "input[name=\"email\"]",
+        "input[placeholder*=\"email\" i]"
+      ],
+      "strategy": "css-id",
+      "stabilityScore": 80,
+      "behaviorNotes": "Salesforce OAuth form; ID is stable"
+    },
+    "passwordInput": {
+      "description": "Password input on login form",
+      "elementType": "input",
+      "primary": "#password",
+      "fallbacks": [
+        "input[type=\"password\"]",
+        "input[name=\"password\"]"
+      ],
+      "strategy": "css-id",
+      "stabilityScore": 90,
+      "behaviorNotes": "Standard password field"
+    },
+    "submitButton": {
+      "description": "Login form submit button",
+      "elementType": "button",
+      "primary": "button[type=\"submit\"]",
+      "fallbacks": [
+        "input[type=\"submit\"]",
+        ".login-button",
+        "button:has-text(\"Iniciar\")",
+        "button:has-text(\"Entrar\")",
+        "button:has-text(\"Login\")"
+      ],
+      "strategy": "css-class",
+      "stabilityScore": 70,
+      "behaviorNotes": "Text varies; button[type=submit] most reliable"
+    },
+    "loggedInIndicator": {
+      "description": "Element indicating user is logged in",
+      "elementType": "text",
+      "primary": ".auc-header__user-name",
+      "fallbacks": [
+        ".auc-header-account span:not(:has-text(\"Login\"))",
+        "[data-testid=\"user-menu\"]"
+      ],
+      "strategy": "css-class",
+      "stabilityScore": 65,
+      "behaviorNotes": "Appears in header after login; contains user name"
+    },
+    "loginError": {
+      "description": "Login error message",
+      "elementType": "text",
+      "primary": ".login-error",
+      "fallbacks": [
+        ".error-message",
+        "[role=\"alert\"]",
+        ".slds-form-element__help"
+      ],
+      "strategy": "css-class",
+      "stabilityScore": 60,
+      "behaviorNotes": "Appears when login fails; Salesforce may use slds classes"
+    }
+  }
+}

@@ -96,6 +96,76 @@ Playwright-based browser automation:
 
 ---
 
+## Selector Registry (CRITICAL)
+
+**Never hardcode selectors.** Use the Selector Registry system for all Auchan.pt page automation.
+
+### Directory Structure
+
+```
+data/selectors/
+  registry.json           # Master index
+  pages/
+    login/v1.json         # Login page selectors
+    cart/v1.json          # Cart page selectors
+    ...
+```
+
+### Key Components
+
+| Component | Purpose | Location |
+|-----------|---------|----------|
+| `SelectorRegistry` | Store/version selector definitions | `src/selectors/registry.ts` |
+| `SelectorResolver` | Resolve keys to selectors with fallbacks | `src/selectors/resolver.ts` |
+| `DiscoveryTool` | Capture page structure, find candidates | `src/tools/discovery.ts` |
+
+### Agent Protocol: Discovery Before Coding
+
+**When automating a new page or element:**
+
+1. **Check registry first** - Does the selector already exist?
+   ```typescript
+   const resolver = new SelectorResolver();
+   if (resolver.hasPage('login')) {
+     const selector = resolver.resolve('login', 'emailInput');
+   }
+   ```
+
+2. **Discover if missing** - Capture page, analyze structure
+   - Take HTML snapshot and screenshot
+   - Identify candidate selectors
+   - Score by stability (data-testid > aria > id > class > text)
+
+3. **Validate candidates** - Test selectors work
+   - Primary selector must be unique
+   - Include 2+ fallbacks
+
+4. **Commit to registry** - Register validated selectors
+   - Create versioned JSON file
+   - Update registry.json index
+
+5. **Use resolver in tools** - Never hardcode
+   ```typescript
+   const result = await resolver.tryResolve(page, 'login', 'submitButton');
+   if (result) {
+     await result.element.click();
+   }
+   ```
+
+### Stability Scoring (Higher = Better)
+
+| Strategy | Score | Example |
+|----------|-------|---------|
+| data-testid | 95 | `[data-testid="login-btn"]` |
+| aria-label | 85 | `[aria-label="Submit"]` |
+| role | 80 | `button[role="submit"]` |
+| css-id | 75 | `#username` |
+| css-class (semantic) | 60 | `.login-button` |
+| text-content | 50 | `button:has-text("Login")` |
+| positional | 20 | `div:nth-child(3)` |
+
+---
+
 ## Implementation Phases
 
 | Phase | Goal | Features |
@@ -195,6 +265,6 @@ npm run dev:browser  # Interactive browser session
 
 ---
 
-**Last Updated:** 2026-01-10
+**Last Updated:** 2026-01-11
 **Project:** AI Shopping Copilot (AISC)
-**Current Sprint:** Sprint-G-001 (Completed)
+**Current Sprint:** Sprint-G-002 (Completed)
