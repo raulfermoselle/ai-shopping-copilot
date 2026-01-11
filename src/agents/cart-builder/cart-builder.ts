@@ -2,25 +2,444 @@
  * CartBuilder Agent Implementation
  *
  * Builds the shopping cart by:
- * - Loading previous orders from Auchan.pt
- * - Loading favorite items
- * - Merging items into a draft cart
- * - Reporting cart differences
+ * - Loading previous orders from Auchan.pt order history
+ * - Using "Encomendar de novo" for bulk cart loading
+ * - Computing cart diff for review
+ *
+ * Key insight from research (Sprint-CB-R-001):
+ * The "Encomendar de novo" button adds an entire order to cart instantly,
+ * eliminating the need to add items individually.
  */
 
 import type { AgentContext, AgentResult } from '../../types/agent.js';
+import type { ToolContext, ToolConfig } from '../../types/tool.js';
+import type {
+  CartBuilderConfig,
+  CartDiffReport,
+  OrderSummary,
+  OrderDetail,
+  CartSnapshot,
+  CartDiff,
+  CartItem,
+} from './types.js';
+import { CartBuilderConfigSchema } from './types.js';
 
-export interface CartBuilderConfig {
-  maxOrdersToLoad: number;
-  includeFavorites: boolean;
+// Import CartBuilder tools
+import {
+  navigateToOrderHistoryTool,
+  loadOrderHistoryTool,
+  loadOrderDetailTool,
+  reorderTool,
+  scanCartTool,
+} from './tools/index.js';
+
+// =============================================================================
+// CartBuilder Result Types
+// =============================================================================
+
+/**
+ * Successful CartBuilder result data.
+ */
+export interface CartBuilderResultData {
+  /** Orders loaded from history */
+  ordersLoaded: OrderSummary[];
+  /** Order details retrieved (if needed) */
+  orderDetails: OrderDetail[];
+  /** Cart state before loading orders */
+  cartBefore: CartSnapshot;
+  /** Cart state after loading orders */
+  cartAfter: CartSnapshot;
+  /** Diff between cart states */
+  diff: CartDiff;
+  /** Full diff report for Coordinator */
+  report: CartDiffReport;
 }
 
-export class CartBuilder {
-  constructor(private readonly config: CartBuilderConfig) {}
+/**
+ * CartBuilder agent result.
+ */
+export interface CartBuilderResult extends AgentResult {
+  data?: CartBuilderResultData;
+}
 
-  run(_context: AgentContext): Promise<AgentResult> {
-    // Placeholder - implementation in future sprint
-    void this.config;
-    return Promise.reject(new Error('Not implemented'));
+// =============================================================================
+// CartBuilder Agent
+// =============================================================================
+
+/**
+ * CartBuilder Agent
+ *
+ * Responsible for:
+ * 1. Navigating to order history
+ * 2. Loading specified orders
+ * 3. Using reorder functionality to populate cart
+ * 4. Computing and reporting cart diff
+ *
+ * Uses the Selector Registry for all page interactions.
+ */
+export class CartBuilder {
+  private readonly config: CartBuilderConfig;
+  private readonly screenshotDir: string;
+  private screenshots: string[] = [];
+
+  constructor(config: Partial<CartBuilderConfig> = {}) {
+    this.config = CartBuilderConfigSchema.parse(config);
+    this.screenshotDir = 'screenshots';
   }
+
+  /**
+   * Create a ToolContext from AgentContext for tool execution.
+   */
+  private createToolContext(context: AgentContext): ToolContext {
+    const { page, logger } = context;
+
+    const toolConfig: ToolConfig = {
+      navigationTimeout: 30000,
+      elementTimeout: 10000,
+      screenshotDir: this.screenshotDir,
+    };
+
+    return {
+      page,
+      logger,
+      screenshot: async (name: string): Promise<string> => {
+        const timestamp = Date.now();
+        const filename = `${name}-${timestamp}.png`;
+        const filepath = `${this.screenshotDir}/${filename}`;
+        await page.screenshot({ path: filepath });
+        this.screenshots.push(filepath);
+        return filepath;
+      },
+      config: toolConfig,
+    };
+  }
+
+  /**
+   * Run the CartBuilder agent.
+   *
+   * @param context - Agent execution context
+   * @returns CartBuilder result with diff report
+   */
+  async run(context: AgentContext): Promise<CartBuilderResult> {
+    const { logger, sessionId } = context;
+    const logs: string[] = [];
+    const toolContext = this.createToolContext(context);
+
+    // Reset screenshots for this run
+    this.screenshots = [];
+
+    try {
+      logger.info('CartBuilder starting', { config: this.config });
+      logs.push('CartBuilder started');
+
+      // Step 1: Capture initial cart state
+      const cartBefore = await this.captureCartSnapshot(toolContext);
+      logs.push(`Initial cart: ${cartBefore.itemCount} items, €${cartBefore.totalPrice.toFixed(2)}`);
+
+      // Step 2: Navigate to order history
+      await this.navigateToOrderHistory(toolContext);
+      logs.push('Navigated to order history');
+
+      // Step 3: Load order list
+      const orders = await this.loadOrderList(toolContext);
+      logs.push(`Found ${orders.length} orders in history`);
+
+      // Step 4: Select orders to load based on strategy
+      const selectedOrders = this.selectOrders(orders);
+      logs.push(`Selected ${selectedOrders.length} orders to load`);
+
+      // Step 5: Load orders into cart using reorder button
+      const orderDetails = await this.reorderSelectedOrders(toolContext, selectedOrders);
+      logs.push(`Loaded ${orderDetails.length} orders into cart`);
+
+      // Step 6: Capture final cart state
+      const cartAfter = await this.captureCartSnapshot(toolContext);
+      logs.push(`Final cart: ${cartAfter.itemCount} items, €${cartAfter.totalPrice.toFixed(2)}`);
+
+      // Step 7: Compute diff
+      const diff = this.computeDiff(cartBefore, cartAfter);
+      logs.push(`Diff: +${diff.summary.addedCount} -${diff.summary.removedCount} ~${diff.summary.changedCount}`);
+
+      // Step 8: Generate report (include screenshots)
+      const report = this.generateReport(
+        sessionId,
+        selectedOrders,
+        cartBefore,
+        cartAfter,
+        diff,
+        this.screenshots
+      );
+
+      logger.info('CartBuilder completed successfully', { diff: diff.summary });
+
+      return {
+        success: true,
+        data: {
+          ordersLoaded: selectedOrders,
+          orderDetails,
+          cartBefore,
+          cartAfter,
+          diff,
+          report,
+        },
+        logs,
+      };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('CartBuilder failed', { error: err.message });
+      logs.push(`Error: ${err.message}`);
+
+      return {
+        success: false,
+        error: err,
+        logs,
+      };
+    }
+  }
+
+  // ===========================================================================
+  // Private Methods - Tool integrations
+  // ===========================================================================
+
+  /**
+   * Capture current cart snapshot using ScanCartTool.
+   */
+  private async captureCartSnapshot(toolContext: ToolContext): Promise<CartSnapshot> {
+    const result = await scanCartTool.execute(
+      { expandAll: true, captureScreenshot: true },
+      toolContext
+    );
+
+    if (!result.success || !result.data) {
+      throw new Error(result.error?.message ?? 'Failed to scan cart');
+    }
+
+    return result.data.snapshot;
+  }
+
+  /**
+   * Navigate to order history page using NavigateToOrderHistoryTool.
+   */
+  private async navigateToOrderHistory(toolContext: ToolContext): Promise<void> {
+    const result = await navigateToOrderHistoryTool.execute(
+      { waitForLoad: true, timeout: 30000 },
+      toolContext
+    );
+
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to navigate to order history');
+    }
+  }
+
+  /**
+   * Load order list from history page using LoadOrderHistoryTool.
+   */
+  private async loadOrderList(toolContext: ToolContext): Promise<OrderSummary[]> {
+    const result = await loadOrderHistoryTool.execute(
+      { maxOrders: this.config.maxOrdersToLoad, includeDeliveryInfo: false },
+      toolContext
+    );
+
+    if (!result.success || !result.data) {
+      throw new Error(result.error?.message ?? 'Failed to load order history');
+    }
+
+    return result.data.orders;
+  }
+
+  /**
+   * Select orders to load based on merge strategy.
+   */
+  private selectOrders(orders: OrderSummary[]): OrderSummary[] {
+    const { maxOrdersToLoad, mergeStrategy } = this.config;
+
+    switch (mergeStrategy) {
+      case 'latest':
+        // Take most recent orders
+        return orders.slice(0, maxOrdersToLoad);
+
+      case 'combined':
+        // Take specified number of most recent orders
+        return orders.slice(0, maxOrdersToLoad);
+
+      case 'most-frequent':
+        // For now, same as latest - frequency analysis in Phase 3
+        return orders.slice(0, maxOrdersToLoad);
+
+      default:
+        return orders.slice(0, maxOrdersToLoad);
+    }
+  }
+
+  /**
+   * Load selected orders into cart using reorder button.
+   * Uses LoadOrderDetailTool and ReorderTool.
+   */
+  private async reorderSelectedOrders(
+    toolContext: ToolContext,
+    orders: OrderSummary[]
+  ): Promise<OrderDetail[]> {
+    const orderDetails: OrderDetail[] = [];
+
+    for (const order of orders) {
+      toolContext.logger.info('Processing order for reorder', { orderId: order.orderId });
+
+      // Load order detail
+      const detailResult = await loadOrderDetailTool.execute(
+        {
+          orderId: order.orderId,
+          detailUrl: order.detailUrl,
+          expandAllProducts: true,
+        },
+        toolContext
+      );
+
+      if (!detailResult.success || !detailResult.data) {
+        toolContext.logger.warn('Failed to load order detail', {
+          orderId: order.orderId,
+          error: detailResult.error?.message,
+        });
+        continue;
+      }
+
+      orderDetails.push(detailResult.data.order);
+
+      // Click reorder button
+      const reorderResult = await reorderTool.execute(
+        {
+          orderId: order.orderId,
+          detailUrl: order.detailUrl,
+        },
+        toolContext
+      );
+
+      if (!reorderResult.success) {
+        toolContext.logger.warn('Failed to reorder', {
+          orderId: order.orderId,
+          error: reorderResult.error?.message,
+        });
+        // Continue to try other orders
+      } else {
+        toolContext.logger.info('Order reordered successfully', {
+          orderId: order.orderId,
+          itemsAdded: reorderResult.data?.itemsAdded,
+        });
+      }
+    }
+
+    return orderDetails;
+  }
+
+  /**
+   * Compute diff between two cart snapshots.
+   * Uses productId as primary key, falls back to name if productId not available.
+   */
+  private computeDiff(before: CartSnapshot, after: CartSnapshot): CartDiff {
+    // Helper to get comparison key - prefer productId, fallback to name
+    const getKey = (item: CartItem): string => item.productId ?? item.name;
+
+    // Create maps for efficient lookup
+    const beforeMap = new Map(before.items.map((item) => [getKey(item), item]));
+    const afterMap = new Map(after.items.map((item) => [getKey(item), item]));
+
+    const added: CartDiff['added'] = [];
+    const removed: CartDiff['removed'] = [];
+    const quantityChanged: CartDiff['quantityChanged'] = [];
+    const unchanged: CartDiff['unchanged'] = [];
+
+    // Find added and changed items
+    for (const [key, afterItem] of afterMap) {
+      const beforeItem = beforeMap.get(key);
+
+      if (!beforeItem) {
+        // Item was added
+        added.push({
+          name: afterItem.name,
+          quantity: afterItem.quantity,
+          unitPrice: afterItem.unitPrice,
+        });
+      } else if (beforeItem.quantity !== afterItem.quantity) {
+        // Quantity changed
+        quantityChanged.push({
+          name: afterItem.name,
+          previousQuantity: beforeItem.quantity,
+          newQuantity: afterItem.quantity,
+          unitPrice: afterItem.unitPrice,
+        });
+      } else {
+        // Unchanged
+        unchanged.push({
+          name: afterItem.name,
+          quantity: afterItem.quantity,
+          unitPrice: afterItem.unitPrice,
+        });
+      }
+    }
+
+    // Find removed items
+    for (const [key, beforeItem] of beforeMap) {
+      if (!afterMap.has(key)) {
+        removed.push({
+          name: beforeItem.name,
+          quantity: beforeItem.quantity,
+          unitPrice: beforeItem.unitPrice,
+        });
+      }
+    }
+
+    const priceDifference = after.totalPrice - before.totalPrice;
+
+    return {
+      added,
+      removed,
+      quantityChanged,
+      unchanged,
+      summary: {
+        addedCount: added.length,
+        removedCount: removed.length,
+        changedCount: quantityChanged.length,
+        unchangedCount: unchanged.length,
+        totalItems: after.itemCount,
+        priceDifference,
+        newTotalPrice: after.totalPrice,
+      },
+    };
+  }
+
+  /**
+   * Generate complete diff report for Coordinator.
+   */
+  private generateReport(
+    sessionId: string,
+    ordersAnalyzed: OrderSummary[],
+    cartBefore: CartSnapshot,
+    cartAfter: CartSnapshot,
+    diff: CartDiff,
+    screenshots: string[] = []
+  ): CartDiffReport {
+    // Calculate confidence based on extraction success
+    const hasWarnings = diff.summary.removedCount > 0;
+    const confidence = hasWarnings ? 0.9 : 1.0;
+
+    return {
+      timestamp: new Date(),
+      sessionId,
+      ordersAnalyzed: ordersAnalyzed.map((o) => o.orderId),
+      cart: {
+        before: cartBefore,
+        after: cartAfter,
+      },
+      diff,
+      confidence,
+      warnings: [],
+      screenshots,
+    };
+  }
+}
+
+/**
+ * Create a CartBuilder instance with configuration.
+ */
+export function createCartBuilder(config?: Partial<CartBuilderConfig>): CartBuilder {
+  return new CartBuilder(config);
 }

@@ -1,0 +1,40 @@
+{
+  "title": "Carrinho Compras | Auchan",
+  "url": "https://www.auchan.pt/pt/carrinho-compras",
+  "emptyIndicators": [
+    {
+      "selector": ".auc-cart--empty",
+      "text": "Carrinho vazio de momento\n    \n    Comece já a comprar com a Auchan\n    Voltar"
+    },
+    {
+      "selector": "[class*=\"empty\"]",
+      "text": "Carrinho vazio de momento\n    \n    Comece já a comprar com a Auchan\n    Voltar"
+    }
+  ],
+  "containers": [
+    {
+      "selector": ".cart",
+      "found": true,
+      "childCount": 1
+    },
+    {
+      "selector": "[class*=\"cart\"]",
+      "found": true,
+      "childCount": 3
+    }
+  ],
+  "items": [
+    {
+      "selector": "[class*=\"product\"]",
+      "count": 3
+    }
+  ],
+  "prices": [
+    {
+      "selector": "[class*=\"total\"]",
+      "text": "0,00 €"
+    }
+  ],
+  "quantityInputs": [],
+  "productNames": []
+}

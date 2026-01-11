@@ -5,3 +5,4 @@
  */
 
 export * from './cart-builder.js';
+export * from './types.js';

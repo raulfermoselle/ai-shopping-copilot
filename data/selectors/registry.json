@@ -36,6 +36,18 @@
         "failedSelectors": []
       },
       "notes": "Shows order details, delivery info, product list, and summary. Accessed by clicking order card from order-history page."
+    },
+    "cart": {
+      "name": "Shopping Cart",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/carrinho-compras",
+      "activeVersion": 1,
+      "versions": [1],
+      "lastValidation": {
+        "timestamp": "2026-01-11T00:00:00Z",
+        "status": "partial",
+        "failedSelectors": []
+      },
+      "notes": "Shopping cart page. Empty cart verified. Item selectors based on Auchan patterns but NOT YET VERIFIED with actual cart items."
     }
   }
 }

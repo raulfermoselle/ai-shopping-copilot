@@ -1,0 +1,240 @@
+{
+  "schemaVersion": "1.0.0",
+  "page": "cart",
+  "version": 1,
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/carrinho-compras",
+  "lastValidated": "2026-01-11T00:00:00Z",
+  "notes": "Shopping cart page. Shows current cart items, quantities, prices, and totals. May be empty.",
+  "selectors": {
+    "cartContainer": {
+      "name": "Main cart container",
+      "primary": ".auc-cart__container",
+      "fallbacks": [
+        ".cart",
+        "main .container"
+      ],
+      "score": 65,
+      "reason": "BEM class naming (moderate stability)",
+      "verified": true,
+      "notes": "Root container for cart page content"
+    },
+    "emptyCartIndicator": {
+      "name": "Empty cart indicator",
+      "primary": ".auc-cart--empty",
+      "fallbacks": [
+        ".cart-empty",
+        ".empty-cart"
+      ],
+      "score": 70,
+      "reason": "BEM modifier for empty state",
+      "verified": true,
+      "notes": "Present when cart has no items. Contains 'Carrinho vazio de momento' text."
+    },
+    "emptyCartMessage": {
+      "name": "Empty cart message text",
+      "primary": ".auc-cart--empty__title",
+      "fallbacks": [
+        ".auc-cart--empty h4",
+        "h4:has-text('Carrinho vazio')"
+      ],
+      "score": 60,
+      "reason": "BEM element class",
+      "verified": true,
+      "notes": "Displays 'Carrinho vazio de momento'"
+    },
+    "cartItem": {
+      "name": "Individual cart item/product",
+      "primary": ".auc-cart__product",
+      "fallbacks": [
+        ".cart-item",
+        ".auc-product-card",
+        "[class*='cart'] [class*='product']"
+      ],
+      "score": 65,
+      "reason": "BEM naming pattern (estimated based on Auchan conventions)",
+      "verified": false,
+      "notes": "Each product in cart. NOT VERIFIED - needs validation with items in cart."
+    },
+    "productName": {
+      "name": "Product name",
+      "primary": ".auc-cart__product-name",
+      "fallbacks": [
+        ".auc-product__name",
+        ".product-name",
+        "a[href*='/produtos/']"
+      ],
+      "score": 60,
+      "reason": "BEM naming (estimated)",
+      "verified": false,
+      "notes": "Product name text or link. NOT VERIFIED."
+    },
+    "productLink": {
+      "name": "Product detail page link",
+      "primary": ".auc-cart__product-name a",
+      "fallbacks": [
+        "a[href*='/produtos/']",
+        ".product-link"
+      ],
+      "score": 70,
+      "reason": "URL pattern is stable",
+      "verified": false,
+      "notes": "Link to product detail page. Contains product ID in URL. NOT VERIFIED."
+    },
+    "productQuantityInput": {
+      "name": "Quantity input field",
+      "primary": ".auc-cart__qty-input",
+      "fallbacks": [
+        "input[type='number']",
+        ".quantity-input",
+        "[name*='quantity']"
+      ],
+      "score": 65,
+      "reason": "Semantic input type",
+      "verified": false,
+      "notes": "Numeric input for item quantity. NOT VERIFIED."
+    },
+    "productUnitPrice": {
+      "name": "Product unit price",
+      "primary": ".auc-cart__product-price",
+      "fallbacks": [
+        ".auc-product__price",
+        ".product-price",
+        "[class*='price']:not([class*='total'])"
+      ],
+      "score": 60,
+      "reason": "BEM naming (estimated)",
+      "verified": false,
+      "notes": "Price per unit. NOT VERIFIED."
+    },
+    "productTotalPrice": {
+      "name": "Product line total price",
+      "primary": ".auc-cart__product-total",
+      "fallbacks": [
+        ".product-total",
+        ".line-total"
+      ],
+      "score": 60,
+      "reason": "BEM naming (estimated)",
+      "verified": false,
+      "notes": "Total price for quantity * unit price. NOT VERIFIED."
+    },
+    "productAvailability": {
+      "name": "Product availability indicator",
+      "primary": ".auc-cart__product-availability",
+      "fallbacks": [
+        ".product-availability",
+        ".availability",
+        "[class*='availability']"
+      ],
+      "score": 55,
+      "reason": "Generic class naming",
+      "verified": false,
+      "notes": "Shows if product is in stock/available. NOT VERIFIED."
+    },
+    "productUnavailableIndicator": {
+      "name": "Unavailable product marker",
+      "primary": ".auc-product--unavailable",
+      "fallbacks": [
+        ".unavailable",
+        ".out-of-stock",
+        "[class*='unavailable']"
+      ],
+      "score": 55,
+      "reason": "Modifier class (estimated)",
+      "verified": false,
+      "notes": "Applied when product is out of stock. NOT VERIFIED."
+    },
+    "cartSubtotal": {
+      "name": "Cart subtotal (items only)",
+      "primary": ".auc-cart__subtotal",
+      "fallbacks": [
+        ".cart-subtotal",
+        "[class*='subtotal']"
+      ],
+      "score": 65,
+      "reason": "BEM naming",
+      "verified": false,
+      "notes": "Sum of all items before fees. NOT VERIFIED."
+    },
+    "cartDeliveryFee": {
+      "name": "Delivery fee",
+      "primary": ".auc-cart__delivery-fee",
+      "fallbacks": [
+        ".delivery-fee",
+        "[class*='delivery']"
+      ],
+      "score": 60,
+      "reason": "BEM naming (estimated)",
+      "verified": false,
+      "notes": "Delivery/shipping cost. NOT VERIFIED."
+    },
+    "cartTotal": {
+      "name": "Cart grand total",
+      "primary": ".auc-cart__total",
+      "fallbacks": [
+        ".cart-total",
+        "[class*='total']:not([class*='subtotal'])"
+      ],
+      "score": 65,
+      "reason": "BEM naming",
+      "verified": false,
+      "notes": "Final total including all fees. NOT VERIFIED."
+    },
+    "removeItemButton": {
+      "name": "Remove item from cart button",
+      "primary": ".auc-cart__remove",
+      "fallbacks": [
+        "button[data-action='remove']",
+        ".remove-button",
+        "[aria-label*='Remover']"
+      ],
+      "score": 60,
+      "reason": "BEM naming with aria fallback",
+      "verified": false,
+      "notes": "Removes product from cart. NOT VERIFIED."
+    },
+    "cartItemCount": {
+      "name": "Total item count",
+      "primary": ".auc-cart__item-count",
+      "fallbacks": [
+        ".cart-count",
+        "[class*='item-count']"
+      ],
+      "score": 55,
+      "reason": "Generic class naming",
+      "verified": false,
+      "notes": "Total number of items in cart. NOT VERIFIED."
+    }
+  },
+  "navigation": {
+    "toCheckout": {
+      "description": "Proceed to checkout",
+      "action": "click",
+      "selector": "checkoutButton",
+      "waitFor": "domcontentloaded",
+      "expectedUrl": "^https://(www\\.)?auchan\\.pt/pt/(checkout|pagamento)"
+    }
+  },
+  "extraction": {
+    "cartItems": {
+      "description": "Extract all items from cart",
+      "container": "cartContainer",
+      "item": "cartItem",
+      "fields": {
+        "name": "productName (text content)",
+        "productUrl": "productLink [href]",
+        "quantity": "productQuantityInput [value] (parse integer)",
+        "unitPrice": "productUnitPrice (parse currency)",
+        "available": "NOT productUnavailableIndicator (boolean)"
+      }
+    },
+    "cartTotals": {
+      "description": "Extract cart totals",
+      "fields": {
+        "subtotal": "cartSubtotal (parse currency)",
+        "deliveryFee": "cartDeliveryFee (parse currency)",
+        "total": "cartTotal (parse currency)"
+      }
+    }
+  }
+}
