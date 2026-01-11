@@ -37,7 +37,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
-| main | [Sprint-CB-R-001](./Modules/CartBuilder/Sprint-CB-R-001/SPRINT-PLAN.md) | In Progress | 2026-01-11 | 2026-01-11 |
+| main | [Sprint-CB-R-001](./Modules/CartBuilder/Sprint-CB-R-001/SPRINT-PLAN.md) | Completed | 2026-01-11 | 2026-01-11 |
 
 ---
 
@@ -45,8 +45,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Active Sprints | 1 |
-| Sprints This Week | 2 |
+| Total Active Sprints | 0 |
+| Sprints This Week | 3 |
 | Pending Merges | 0 |
 
 > **Note**: Per-branch metrics (deadlock counter, session state) are stored in `.sprint-state.local`
@@ -56,7 +56,7 @@
 ## Sprint Queue (Prioritized)
 
 ### Priority 1 (Next)
-- **Sprint-CB-R-001**: Research Auchan.pt order history UI *(Active)*
+- **Sprint-CB-A-001**: Design CartBuilder worker interface & data models
 - Sprint-SU-R-001: Research Auchan.pt product search
 - Sprint-SS-R-001: Research Auchan.pt delivery slots
 
@@ -72,6 +72,7 @@
 
 | Date | Branch | Sprint | Summary | Merged To |
 |------|--------|--------|---------|-----------|
+| 2026-01-11 | main | Sprint-CB-R-001 | Order history UI research, 30 selectors, reorder button discovery | - |
 | 2026-01-11 | main | Sprint-G-002 | Auchan.pt login automation, session persistence, Selector Registry system | - |
 | 2026-01-10 | main | Sprint-G-001 | Project scaffolding, Playwright setup, TypeScript config | - |
 
@@ -123,11 +124,11 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 
 ## Notes for Next Session
 
-- **Sprint-CB-R-001 active** - Researching Auchan.pt order history UI
-- Goal: Discover selectors for order history and order details pages
-- Use playwright-rpa-engineer for autonomous page discovery
-- Login working (AUCHAN_EMAIL, AUCHAN_PASSWORD env vars)
-- Selector Registry system ready for new page registrations
+- **Sprint-CB-R-001 complete** - Order history research done
+- **Key finding:** "Encomendar de novo" button adds entire order to cart
+- 30 selectors registered (order-history + order-detail pages)
+- Next: **Sprint-CB-A-001** - Design CartBuilder interface using research findings
+- Login working, Selector Registry populated, ready for implementation
 
 ---
 
