@@ -72,7 +72,7 @@
 
 | Date | Branch | Sprint | Summary | Merged To |
 |------|--------|--------|---------|-----------|
-| 2026-01-11 | main | Sprint-G-002 | Auchan.pt login automation, session persistence | - |
+| 2026-01-11 | main | Sprint-G-002 | Auchan.pt login automation, session persistence, Selector Registry system | - |
 | 2026-01-10 | main | Sprint-G-001 | Project scaffolding, Playwright setup, TypeScript config | - |
 
 ---
@@ -123,11 +123,12 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 
 ## Notes for Next Session
 
-- **Sprint-G-002 completed** - Login automation ready
-- Login tool requires credentials (set AUCHAN_EMAIL, AUCHAN_PASSWORD)
+- **Sprint-G-002 completed** - Login automation verified working
+- **Selector Registry system** established for autonomous page discovery
+- Login verified with real credentials (user "RAUL" logged in)
+- Credentials via env vars: AUCHAN_EMAIL, AUCHAN_PASSWORD
 - Session persistence implemented for cookie reuse
-- Next: Test login with real credentials (headed browser)
-- Then: **Sprint-CB-R-001** (Research Auchan.pt order history UI)
+- Next: **Sprint-CB-R-001** (Research Auchan.pt order history UI)
 
 ---
 
