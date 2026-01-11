@@ -93,7 +93,7 @@ function parseDeliveryCost(text: string): {
   ) {
     // Check if there's a threshold mentioned
     const thresholdMatch = text.match(/€\s*(\d+(?:[.,]\d+)?)/);
-    if (thresholdMatch && thresholdMatch[1]) {
+    if (thresholdMatch?.[1]) {
       return {
         cost: 0,
         freeAboveThreshold: true,
@@ -106,7 +106,7 @@ function parseDeliveryCost(text: string): {
 
   // Parse cost amount
   const costMatch = text.match(/€\s*(\d+(?:[.,]\d+)?)/);
-  if (costMatch && costMatch[1]) {
+  if (costMatch?.[1]) {
     return { cost: parseFloat(costMatch[1].replace(',', '.')) };
   }
 
@@ -214,7 +214,7 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
         'button[class*="slot"]',
       ];
 
-      let slotElements: Array<{ element: any; text: string }> = [];
+      const slotElements: Array<{ element: any; text: string }> = [];
 
       // Try to find slot container elements
       for (const containerSelector of slotContainerSelectors) {
@@ -384,7 +384,7 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
         const bodyText = await page.textContent('body', { timeout: 2000 }).catch(() => null);
         if (bodyText) {
           const match = bodyText.match(/mínima?:?\s*€?\s*(\d+(?:[.,]\d+)?)/i);
-          if (match && match[1]) {
+          if (match?.[1]) {
             minimumOrder = parseFloat(match[1].replace(',', '.'));
           }
         }

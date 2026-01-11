@@ -476,7 +476,7 @@ describe('Substitution', () => {
           if (selector.includes('price')) {
             return {
               first: vi.fn().mockReturnValue({
-                textContent: vi.fn().mockResolvedValue(`${product.unitPrice!.toFixed(2).replace('.', ',')} \u20AC`),
+                textContent: vi.fn().mockResolvedValue(`${product.unitPrice.toFixed(2).replace('.', ',')} \u20AC`),
               }),
             };
           }

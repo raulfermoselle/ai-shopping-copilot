@@ -211,8 +211,8 @@ describe('scanCartTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       // Not empty cart
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       const cartItems = [
         createMockCartItemLocator({
@@ -270,8 +270,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       const cartItems = [
         createMockCartItemLocator({
@@ -316,7 +316,7 @@ describe('scanCartTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       // Empty cart indicator found
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -340,7 +340,7 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -361,7 +361,7 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -380,8 +380,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       const unavailableItem = createMockCartItemLocator({
         name: 'Unavailable Product',
@@ -421,8 +421,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       mockPage.locator.mockReturnValue({
         all: vi.fn().mockResolvedValue([]),
@@ -443,8 +443,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       const itemWithPortugueseCurrency = createMockCartItemLocator({
         name: 'Test Product',
@@ -481,8 +481,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       mockPage.locator.mockReturnValue({
         all: vi.fn().mockResolvedValue([]),
@@ -506,7 +506,7 @@ describe('scanCartTool', () => {
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -526,7 +526,7 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -544,7 +544,7 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/cart');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -563,8 +563,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       const mockExpandButton = {
         isVisible: vi.fn().mockResolvedValue(true),
@@ -607,8 +607,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       mockPage.locator.mockReturnValue({
         all: vi.fn().mockResolvedValue([]),
@@ -631,8 +631,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       mockPage.locator.mockReturnValue({
         all: vi.fn().mockResolvedValue([]),
@@ -670,7 +670,7 @@ describe('scanCartTool', () => {
       // Arrange
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockRejectedValue(
+      (mockResolverInstance.tryResolve).mockRejectedValue(
         new Error('Selector failed')
       );
 
@@ -702,7 +702,7 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -722,7 +722,7 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
       });
@@ -743,8 +743,8 @@ describe('scanCartTool', () => {
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector as Mock).mockReturnValue('.cart-item');
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
       // Create a failing item that throws when extracting name
       const failingItem = {

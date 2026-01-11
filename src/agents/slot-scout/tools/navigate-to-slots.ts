@@ -221,7 +221,7 @@ export const navigateToSlotsTool: Tool<NavigateToSlotsInput, NavigateToSlotsOutp
 
         if (minOrderText) {
           const match = minOrderText.match(/mínima?:?\s*€?\s*(\d+(?:[.,]\d+)?)/i);
-          if (match && match[1]) {
+          if (match?.[1]) {
             minimumOrder = parseFloat(match[1].replace(',', '.'));
             logger.info('Detected minimum order value', { minimumOrder });
           }

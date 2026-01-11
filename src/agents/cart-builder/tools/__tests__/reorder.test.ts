@@ -169,7 +169,7 @@ describe('reorderTool', () => {
       // Create a mock modal confirm button
       const mockConfirmButton = createMockElement();
 
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'reorderButton') {
             return { element: mockReorderButton, usedFallback: false };
@@ -256,7 +256,7 @@ describe('reorderTool', () => {
         'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
       );
 
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'orderHeader') {
             return { element: createMockElement(), usedFallback: false };
@@ -289,7 +289,7 @@ describe('reorderTool', () => {
         'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
       );
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
 
       // Act
       const result = await reorderTool.execute(
@@ -316,7 +316,7 @@ describe('reorderTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect after reorder
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: mockReorderButton,
         usedFallback: false,
       });
@@ -347,7 +347,7 @@ describe('reorderTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'orderHeader') {
             return { element: createMockElement(), usedFallback: false };
@@ -386,7 +386,7 @@ describe('reorderTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect after reorder
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: mockReorderButton,
         usedFallback: false,
       });
@@ -430,7 +430,7 @@ describe('reorderTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect after reorder
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: mockReorderButton,
         usedFallback: false,
       });
@@ -478,7 +478,7 @@ describe('reorderTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/carrinho');
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: mockReorderButton,
         usedFallback: false,
       });
@@ -509,7 +509,7 @@ describe('reorderTool', () => {
         'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
       );
 
-      (mockResolverInstance.tryResolve as Mock).mockRejectedValue(
+      (mockResolverInstance.tryResolve).mockRejectedValue(
         new Error('timeout waiting for selector')
       );
 
@@ -538,7 +538,7 @@ describe('reorderTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: mockReorderButton,
         usedFallback: true,
         fallbackIndex: 2,
@@ -570,7 +570,7 @@ describe('reorderTool', () => {
         'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
       );
 
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
 
       // Act
       const result = await reorderTool.execute(
@@ -595,7 +595,7 @@ describe('reorderTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/carrinho'); // redirect
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: mockReorderButton,
         usedFallback: false,
       });
@@ -639,7 +639,7 @@ describe('reorderTool', () => {
       ); // never redirects to cart
 
       const mockReorderButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: mockReorderButton,
         usedFallback: false,
       });

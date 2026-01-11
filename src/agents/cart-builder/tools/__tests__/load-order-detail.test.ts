@@ -180,7 +180,7 @@ function createMockProductCard(product: {
  * Setup resolver.resolve mock to return appropriate selectors for each key
  */
 function setupResolverMock(): void {
-  (mockResolverInstance.resolve as Mock).mockImplementation((_pageId: string, selectorKey: string) => {
+  (mockResolverInstance.resolve).mockImplementation((_pageId: string, selectorKey: string) => {
     const selectorMap: Record<string, string> = {
       productCard: '.product-card',
       productNameLink: '.product-name-link',
@@ -222,7 +222,7 @@ describe('loadOrderDetailTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       // Mock order header resolve
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'orderHeader') {
             return { element: createMockElement(), usedFallback: false };
@@ -331,7 +331,7 @@ describe('loadOrderDetailTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       // Order header found means page loaded
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
 
       // Act
       const result = await loadOrderDetailTool.execute(
@@ -360,7 +360,7 @@ describe('loadOrderDetailTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       const mockViewAllButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'orderHeader') {
             return { element: createMockElement(), usedFallback: false };
@@ -438,7 +438,7 @@ describe('loadOrderDetailTool', () => {
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
       const mockViewAllButton = createMockElement();
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'orderHeader') {
             return { element: createMockElement(), usedFallback: false };
@@ -513,7 +513,7 @@ describe('loadOrderDetailTool', () => {
     it('should handle missing order header with error', async () => {
       // Arrange
       mockPage.goto.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null); // Header not found
+      (mockResolverInstance.tryResolve).mockResolvedValue(null); // Header not found
 
       // Act
       const result = await loadOrderDetailTool.execute(
@@ -532,7 +532,7 @@ describe('loadOrderDetailTool', () => {
     it('should capture screenshot on error', async () => {
       // Arrange
       mockPage.goto.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
 
       // Act
       const result = await loadOrderDetailTool.execute(
@@ -553,7 +553,7 @@ describe('loadOrderDetailTool', () => {
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'orderHeader') {
             return {
@@ -650,7 +650,7 @@ describe('loadOrderDetailTool', () => {
     it('should include duration in result', async () => {
       // Arrange
       mockPage.goto.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
 
       // Act
       const result = await loadOrderDetailTool.execute(
@@ -673,7 +673,7 @@ describe('loadOrderDetailTool', () => {
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForTimeout.mockResolvedValue(undefined);
 
-      (mockResolverInstance.tryResolve as Mock).mockImplementation(
+      (mockResolverInstance.tryResolve).mockImplementation(
         async (_page, _pageId, selectorKey) => {
           if (selectorKey === 'orderHeader') {
             return { element: createMockElement(), usedFallback: false };

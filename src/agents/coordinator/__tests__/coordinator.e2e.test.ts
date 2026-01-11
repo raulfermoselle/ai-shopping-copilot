@@ -329,7 +329,7 @@ describe('Coordinator E2E - Mocked Tests (Always Run)', () => {
       const coordinator = createCoordinator();
 
       // Act - Session should be null before run
-      let session = coordinator.getSession();
+      const session = coordinator.getSession();
 
       // Assert
       expect(session).toBeNull();
@@ -368,7 +368,7 @@ describe('Coordinator E2E - Mocked Tests (Always Run)', () => {
       });
 
       // Before run, no session
-      let session = coordinator.getSession();
+      const session = coordinator.getSession();
       expect(session).toBeNull();
     });
 

@@ -140,7 +140,7 @@ describe('navigateToOrderHistoryTool', () => {
     it('should return success when already on order history page', async () => {
       // Arrange
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list',
         usedFallback: false,
@@ -166,7 +166,7 @@ describe('navigateToOrderHistoryTool', () => {
     it('should still verify container when already on page with waitForLoad true', async () => {
       // Arrange
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list',
         usedFallback: false,
@@ -190,7 +190,7 @@ describe('navigateToOrderHistoryTool', () => {
     it('should capture screenshot when already on page', async () => {
       // Arrange
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list',
         usedFallback: false,
@@ -216,7 +216,7 @@ describe('navigateToOrderHistoryTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/historico-encomendas'); // After navigation
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForLoadState.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list',
         usedFallback: false,
@@ -245,7 +245,7 @@ describe('navigateToOrderHistoryTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForLoadState.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list',
         usedFallback: false,
@@ -270,7 +270,7 @@ describe('navigateToOrderHistoryTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForLoadState.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list-fallback',
         usedFallback: true,
@@ -370,7 +370,7 @@ describe('navigateToOrderHistoryTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForLoadState.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
 
       // Act
       const result = await navigateToOrderHistoryTool.execute(
@@ -392,7 +392,7 @@ describe('navigateToOrderHistoryTool', () => {
         .mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
       mockPage.goto.mockResolvedValue(undefined);
       mockPage.waitForLoadState.mockResolvedValue(undefined);
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue(null);
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
 
       // Act
       const result = await navigateToOrderHistoryTool.execute(
@@ -450,7 +450,7 @@ describe('navigateToOrderHistoryTool', () => {
     it('should include duration in result', async () => {
       // Arrange
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list',
         usedFallback: false,
@@ -469,7 +469,7 @@ describe('navigateToOrderHistoryTool', () => {
     it('should use default waitForLoad true', async () => {
       // Arrange
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/historico-encomendas');
-      (mockResolverInstance.tryResolve as Mock).mockResolvedValue({
+      (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         selector: '.order-list',
         usedFallback: false,
