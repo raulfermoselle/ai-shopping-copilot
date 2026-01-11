@@ -30,6 +30,9 @@ import type {
   CoordinatorError,
   ReviewPack,
   CartBuilderWorkerResult,
+  SubstitutionWorkerResult,
+  StockPrunerWorkerResult,
+  SlotScoutWorkerResult,
 } from './types.js';
 import {
   CoordinatorConfigSchema,
@@ -40,8 +43,15 @@ import {
   toReviewCartItem,
 } from './types.js';
 import { CartBuilder } from '../cart-builder/cart-builder.js';
+import { Substitution } from '../substitution/substitution.js';
+import { StockPruner, type StockPrunerRunInput } from '../stock-pruner/stock-pruner.js';
+import { SlotScout } from '../slot-scout/slot-scout.js';
 import { createLoginTool, type LoginResult } from '../../tools/login.js';
 import type { ToolContext, ToolConfig } from '../../types/tool.js';
+import type { CartSnapshot } from '../cart-builder/types.js';
+import type { SubstitutionWorkerInput } from '../substitution/types.js';
+import type { PurchaseRecord } from '../stock-pruner/types.js';
+import type { SlotScoutInput } from '../slot-scout/types.js';
 
 /**
  * Coordinator Agent
@@ -65,22 +75,29 @@ export class Coordinator {
   /**
    * Run the Coordinator agent.
    *
-   * Executes the Phase 1 orchestration flow:
+   * Executes the Phase 2 orchestration flow:
    * 1. Initialize session
-   * 2. Login to Auchan.pt (assumes already logged in for Phase 1)
-   * 3. Delegate to CartBuilder
-   * 4. Generate Review Pack
-   * 5. Return ready-to-review cart
+   * 2. Login to Auchan.pt
+   * 3. Delegate to CartBuilder (load/merge orders)
+   * 4. Delegate to Substitution (if enabled) - check availability, find substitutes
+   * 5. Delegate to StockPruner (if enabled) - analyze cart against purchase history
+   * 6. Delegate to SlotScout (if enabled) - find delivery slots
+   * 7. Generate Review Pack (with all worker results)
+   * 8. Return ready-to-review cart
+   *
+   * SAFETY CONSTRAINT: Coordinator NEVER submits orders - stops at review stage.
    *
    * @param context - Agent execution context
    * @param username - Auchan username (email)
    * @param householdId - Household identifier for preferences
+   * @param purchaseHistory - Optional purchase history for StockPruner
    * @returns CoordinatorResult with Review Pack
    */
   async run(
     context: AgentContext,
     username: string,
-    householdId: string
+    householdId: string,
+    purchaseHistory?: PurchaseRecord[]
   ): Promise<CoordinatorResult> {
     const { logger, sessionId } = context;
     const logs: string[] = [];
@@ -88,7 +105,14 @@ export class Coordinator {
 
     try {
       // Step 1: Initialize session
-      logger.info('Coordinator starting session', { sessionId, username, householdId });
+      logger.info('Coordinator starting session', {
+        sessionId,
+        username,
+        householdId,
+        enableSubstitution: this.config.enableSubstitution,
+        enableStockPruning: this.config.enableStockPruning,
+        enableSlotScouting: this.config.enableSlotScouting,
+      });
       logs.push('Coordinator session started');
 
       this.session = createSession(sessionId, username, householdId);
@@ -119,13 +143,62 @@ export class Coordinator {
         throw new Error(cartBuilderResult.errorMessage ?? 'CartBuilder failed without error message');
       }
 
-      // Step 4: Generate Review Pack
+      // Get cart snapshot for Phase 2 workers
+      const cartSnapshot = cartBuilderResult.report.cart.after;
+
+      // Step 4: Delegate to Substitution (if enabled)
+      // Non-blocking: failures here don't stop the session
+      let substitutionResult: SubstitutionWorkerResult = null;
+      if (this.config.enableSubstitution && cartSnapshot.items.length > 0) {
+        logger.info('Running Substitution worker');
+        substitutionResult = await this.delegateToSubstitution(context, cartSnapshot.items);
+        logs.push(
+          substitutionResult?.success
+            ? `Substitution completed: ${substitutionResult.summary?.unavailableItems ?? 0} unavailable items, ${substitutionResult.summary?.itemsWithSubstitutes ?? 0} with substitutes`
+            : `Substitution failed: ${substitutionResult?.errorMessage ?? 'Unknown error'}`
+        );
+      }
+
+      // Step 5: Delegate to StockPruner (if enabled)
+      // Non-blocking: failures here don't stop the session
+      let stockPrunerResult: StockPrunerWorkerResult = null;
+      if (this.config.enableStockPruning && cartSnapshot.items.length > 0) {
+        logger.info('Running StockPruner worker');
+        // Use provided purchase history or empty array
+        const history = purchaseHistory ?? [];
+        stockPrunerResult = await this.delegateToStockPruner(context, cartSnapshot, history);
+        logs.push(
+          stockPrunerResult?.success
+            ? `StockPruner completed: ${stockPrunerResult.summary?.suggestedForPruning ?? 0} items suggested for removal`
+            : `StockPruner failed: ${stockPrunerResult?.errorMessage ?? 'Unknown error'}`
+        );
+      }
+
+      // Step 6: Delegate to SlotScout (if enabled)
+      // Non-blocking: failures here don't stop the session
+      let slotScoutResult: SlotScoutWorkerResult = null;
+      if (this.config.enableSlotScouting) {
+        logger.info('Running SlotScout worker');
+        slotScoutResult = await this.delegateToSlotScout(context, cartSnapshot.totalPrice);
+        logs.push(
+          slotScoutResult?.success
+            ? `SlotScout completed: ${slotScoutResult.summary?.availableSlots ?? 0} available slots found`
+            : `SlotScout failed: ${slotScoutResult?.errorMessage ?? 'Unknown error'}`
+        );
+      }
+
+      // Step 7: Generate Review Pack with all worker results
       this.updateStatus('generating_review');
-      const reviewPack = this.generateReviewPack(cartBuilderResult.report);
+      const reviewPack = this.generateReviewPack(
+        cartBuilderResult.report,
+        substitutionResult,
+        stockPrunerResult,
+        slotScoutResult
+      );
       this.session.reviewPack = reviewPack;
       logs.push('Review Pack generated');
 
-      // Step 5: Mark ready for review
+      // Step 8: Mark ready for review
       this.updateStatus('review_ready');
       this.session.endTime = new Date();
 
@@ -134,6 +207,9 @@ export class Coordinator {
         sessionId,
         durationMs,
         itemCount: reviewPack.cart.summary.itemCount,
+        substitutionEnabled: this.config.enableSubstitution,
+        stockPruningEnabled: this.config.enableStockPruning,
+        slotScoutingEnabled: this.config.enableSlotScouting,
       });
 
       return {
@@ -464,6 +540,334 @@ export class Coordinator {
   }
 
   /**
+   * Delegate to Substitution worker with timeout handling.
+   *
+   * Checks item availability and finds substitutes for unavailable items.
+   * Non-blocking: if this worker fails, the session continues with other workers.
+   *
+   * @param context - Agent context with page and logger
+   * @param cartItems - Items to check availability for
+   * @returns Substitution worker result
+   */
+  private async delegateToSubstitution(
+    context: AgentContext,
+    cartItems: CartSnapshot['items']
+  ): Promise<SubstitutionWorkerResult> {
+    const { logger } = context;
+    const startTime = Date.now();
+
+    try {
+      logger.info('Substitution delegation starting', {
+        itemCount: cartItems.length,
+        timeout: this.config.sessionTimeout,
+      });
+
+      const substitution = new Substitution();
+
+      // Convert cart items to Substitution input format
+      const input: SubstitutionWorkerInput = {
+        items: cartItems.map((item) => ({
+          productId: item.productId,
+          name: item.name,
+          productUrl: item.productUrl,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      };
+
+      // Execute with timeout protection
+      const result = await this.executeWithTimeout(
+        substitution.run(context, input),
+        this.config.sessionTimeout,
+        'Substitution execution timed out'
+      );
+
+      const durationMs = Date.now() - startTime;
+
+      if (result.success && result.data) {
+        const workerResult: SubstitutionWorkerResult = {
+          success: true,
+          durationMs,
+          availabilityResults: result.data.availabilityResults,
+          substitutionResults: result.data.substitutionResults,
+          summary: result.data.summary,
+        };
+
+        if (this.session) {
+          this.session.workers.substitution = workerResult;
+        }
+
+        logger.info('Substitution completed', {
+          summary: result.data.summary,
+          durationMs,
+        });
+
+        return workerResult;
+      } else {
+        // Worker returned failure
+        const workerResult: SubstitutionWorkerResult = {
+          success: false,
+          durationMs,
+          errorMessage: result.error?.message ?? 'Substitution failed',
+        };
+
+        if (this.session) {
+          this.session.workers.substitution = workerResult;
+          this.recordError(
+            createError(
+              'SUBSTITUTION_FAILED',
+              workerResult.errorMessage ?? 'Substitution failed',
+              'warning',
+              'substitution'
+            )
+          );
+        }
+
+        return workerResult;
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const durationMs = Date.now() - startTime;
+
+      logger.warn('Substitution exception (non-blocking)', { error: err.message });
+
+      const workerResult: SubstitutionWorkerResult = {
+        success: false,
+        durationMs,
+        errorMessage: err.message,
+      };
+
+      if (this.session) {
+        this.session.workers.substitution = workerResult;
+        this.recordError(
+          createError('SUBSTITUTION_EXCEPTION', err.message, 'warning', 'substitution')
+        );
+      }
+
+      return workerResult;
+    }
+  }
+
+  /**
+   * Delegate to StockPruner worker with timeout handling.
+   *
+   * Analyzes cart items against purchase history to suggest items
+   * that may not need reordering. Non-blocking: if this worker fails,
+   * the session continues with other workers.
+   *
+   * @param context - Agent context with page and logger
+   * @param cart - Current cart snapshot
+   * @param purchaseHistory - Historical purchase records
+   * @returns StockPruner worker result
+   */
+  private async delegateToStockPruner(
+    context: AgentContext,
+    cart: CartSnapshot,
+    purchaseHistory: PurchaseRecord[]
+  ): Promise<StockPrunerWorkerResult> {
+    const { logger } = context;
+    const startTime = Date.now();
+
+    try {
+      logger.info('StockPruner delegation starting', {
+        cartItemCount: cart.itemCount,
+        historyRecordCount: purchaseHistory.length,
+        timeout: this.config.sessionTimeout,
+      });
+
+      const stockPruner = new StockPruner();
+
+      const input: StockPrunerRunInput = {
+        cart,
+        purchaseHistory,
+      };
+
+      // Execute with timeout protection
+      const result = await this.executeWithTimeout(
+        stockPruner.run(context, input),
+        this.config.sessionTimeout,
+        'StockPruner execution timed out'
+      );
+
+      const durationMs = Date.now() - startTime;
+
+      if (result.success && result.data) {
+        const workerResult: StockPrunerWorkerResult = {
+          success: true,
+          durationMs,
+          report: result.data.report,
+          recommendedRemovals: result.data.recommendedRemovals,
+          uncertainItems: result.data.uncertainItems,
+          summary: {
+            totalItems: result.data.report.itemsAnalyzed,
+            suggestedForPruning: result.data.report.itemsSuggestedForPruning,
+            keepInCart: result.data.keepItems.length,
+            lowConfidenceDecisions: result.data.uncertainItems.length,
+          },
+        };
+
+        if (this.session) {
+          this.session.workers.stockPruner = workerResult;
+        }
+
+        logger.info('StockPruner completed', {
+          summary: workerResult.summary,
+          durationMs,
+        });
+
+        return workerResult;
+      } else {
+        // Worker returned failure
+        const workerResult: StockPrunerWorkerResult = {
+          success: false,
+          durationMs,
+          errorMessage: result.error?.message ?? 'StockPruner failed',
+        };
+
+        if (this.session) {
+          this.session.workers.stockPruner = workerResult;
+          this.recordError(
+            createError(
+              'STOCK_PRUNER_FAILED',
+              workerResult.errorMessage ?? 'StockPruner failed',
+              'warning',
+              'stock_pruner'
+            )
+          );
+        }
+
+        return workerResult;
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const durationMs = Date.now() - startTime;
+
+      logger.warn('StockPruner exception (non-blocking)', { error: err.message });
+
+      const workerResult: StockPrunerWorkerResult = {
+        success: false,
+        durationMs,
+        errorMessage: err.message,
+      };
+
+      if (this.session) {
+        this.session.workers.stockPruner = workerResult;
+        this.recordError(
+          createError('STOCK_PRUNER_EXCEPTION', err.message, 'warning', 'stock_pruner')
+        );
+      }
+
+      return workerResult;
+    }
+  }
+
+  /**
+   * Delegate to SlotScout worker with timeout handling.
+   *
+   * Navigates to delivery slot selection and extracts available slots.
+   * Non-blocking: if this worker fails, the session continues with other workers.
+   *
+   * SAFETY: SlotScout always returns to cart after scouting - never completes checkout.
+   *
+   * @param context - Agent context with page and logger
+   * @param cartTotal - Current cart total for free delivery threshold checks
+   * @returns SlotScout worker result
+   */
+  private async delegateToSlotScout(
+    context: AgentContext,
+    cartTotal?: number
+  ): Promise<SlotScoutWorkerResult> {
+    const { logger } = context;
+    const startTime = Date.now();
+
+    try {
+      logger.info('SlotScout delegation starting', {
+        cartTotal,
+        timeout: this.config.sessionTimeout,
+      });
+
+      const slotScout = new SlotScout();
+
+      const input: SlotScoutInput = {};
+      if (cartTotal !== undefined) {
+        input.cartTotal = cartTotal;
+      }
+
+      // Execute with timeout protection
+      const result = await this.executeWithTimeout(
+        slotScout.run(context, input),
+        this.config.sessionTimeout,
+        'SlotScout execution timed out'
+      );
+
+      const durationMs = Date.now() - startTime;
+
+      if (result.success && result.data) {
+        const workerResult: SlotScoutWorkerResult = {
+          success: true,
+          durationMs,
+          slotsByDay: result.data.slotsByDay,
+          rankedSlots: result.data.rankedSlots,
+          summary: result.data.summary,
+          minimumOrder: result.data.minimumOrder,
+        };
+
+        if (this.session) {
+          this.session.workers.slotScout = workerResult;
+        }
+
+        logger.info('SlotScout completed', {
+          summary: result.data.summary,
+          durationMs,
+        });
+
+        return workerResult;
+      } else {
+        // Worker returned failure
+        const workerResult: SlotScoutWorkerResult = {
+          success: false,
+          durationMs,
+          errorMessage: result.error?.message ?? 'SlotScout failed',
+        };
+
+        if (this.session) {
+          this.session.workers.slotScout = workerResult;
+          this.recordError(
+            createError(
+              'SLOT_SCOUT_FAILED',
+              workerResult.errorMessage ?? 'SlotScout failed',
+              'warning',
+              'slot_scout'
+            )
+          );
+        }
+
+        return workerResult;
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const durationMs = Date.now() - startTime;
+
+      logger.warn('SlotScout exception (non-blocking)', { error: err.message });
+
+      const workerResult: SlotScoutWorkerResult = {
+        success: false,
+        durationMs,
+        errorMessage: err.message,
+      };
+
+      if (this.session) {
+        this.session.workers.slotScout = workerResult;
+        this.recordError(
+          createError('SLOT_SCOUT_EXCEPTION', err.message, 'warning', 'slot_scout')
+        );
+      }
+
+      return workerResult;
+    }
+  }
+
+  /**
    * Execute a promise with timeout protection.
    *
    * @param promise - The promise to execute
@@ -551,15 +955,23 @@ export class Coordinator {
   // ===========================================================================
 
   /**
-   * Generate Review Pack from CartBuilder report.
+   * Generate Review Pack from all worker results.
    *
-   * Transforms CartDiffReport into user-friendly Review Pack format
-   * for display in Control Panel.
+   * Transforms CartDiffReport and Phase 2 worker results into user-friendly
+   * Review Pack format for display in Control Panel.
    *
    * @param report - CartBuilder diff report
+   * @param substitutionResult - Substitution worker result (optional)
+   * @param stockPrunerResult - StockPruner worker result (optional)
+   * @param slotScoutResult - SlotScout worker result (optional)
    * @returns Review Pack ready for user approval
    */
-  private generateReviewPack(report: CartBuilderWorkerResult['report']): ReviewPack {
+  private generateReviewPack(
+    report: CartBuilderWorkerResult['report'],
+    substitutionResult?: SubstitutionWorkerResult,
+    stockPrunerResult?: StockPrunerWorkerResult,
+    slotScoutResult?: SlotScoutWorkerResult
+  ): ReviewPack {
     if (!report) {
       throw new Error('Cannot generate Review Pack without CartBuilder report');
     }
@@ -582,6 +994,11 @@ export class Coordinator {
     // Calculate confidence scores
     const cartAccuracy = confidence;
     const dataQuality = warnings.length === 0 ? 1.0 : Math.max(0.5, 1 - warnings.length * 0.1);
+
+    // Build Phase 2 sections if results are available
+    const substitutions = this.buildSubstitutionsSection(substitutionResult);
+    const pruning = this.buildPruningSection(stockPrunerResult);
+    const slots = this.buildSlotsSection(slotScoutResult);
 
     return {
       sessionId: this.session?.sessionId ?? report.sessionId,
@@ -629,11 +1046,73 @@ export class Coordinator {
         sourceOrders: ordersAnalyzed,
       },
 
-      // Phase 2+ fields (not populated)
-      substitutions: undefined,
-      pruning: undefined,
-      slots: undefined,
+      // Phase 2 fields - populated if workers ran successfully
+      substitutions,
+      pruning,
+      slots,
     };
+  }
+
+  /**
+   * Build substitutions section for Review Pack from Substitution worker result.
+   */
+  private buildSubstitutionsSection(
+    result: SubstitutionWorkerResult | undefined
+  ): ReviewPack['substitutions'] {
+    if (!result?.success || !result.summary) {
+      return undefined;
+    }
+
+    return {
+      availabilityResults: result.availabilityResults ?? [],
+      substitutionResults: result.substitutionResults ?? [],
+      summary: result.summary,
+    };
+  }
+
+  /**
+   * Build pruning section for Review Pack from StockPruner worker result.
+   */
+  private buildPruningSection(
+    result: StockPrunerWorkerResult | undefined
+  ): ReviewPack['pruning'] {
+    if (!result?.success || !result.summary) {
+      return undefined;
+    }
+
+    return {
+      recommendedRemovals: result.recommendedRemovals ?? [],
+      uncertainItems: result.uncertainItems ?? [],
+      summary: {
+        totalItems: result.summary.totalItems,
+        suggestedForPruning: result.summary.suggestedForPruning,
+        keepInCart: result.summary.keepInCart,
+      },
+      overallConfidence: result.report?.overallConfidence ?? 0.5,
+    };
+  }
+
+  /**
+   * Build slots section for Review Pack from SlotScout worker result.
+   */
+  private buildSlotsSection(
+    result: SlotScoutWorkerResult | undefined
+  ): ReviewPack['slots'] {
+    if (!result?.success || !result.summary) {
+      return undefined;
+    }
+
+    const slotsSection: NonNullable<ReviewPack['slots']> = {
+      slotsByDay: result.slotsByDay ?? [],
+      rankedSlots: result.rankedSlots ?? [],
+      summary: result.summary,
+    };
+
+    if (result.minimumOrder !== undefined) {
+      slotsSection.minimumOrder = result.minimumOrder;
+    }
+
+    return slotsSection;
   }
 
   /**

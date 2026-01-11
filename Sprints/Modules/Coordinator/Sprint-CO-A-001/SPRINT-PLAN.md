@@ -44,15 +44,18 @@ Phase 1 focuses on the minimal path: login → load/merge cart → diff report �
 
 | Task | Description | Status |
 |------|-------------|--------|
-| T001 | Design Coordinator agent interface and types | Pending |
-| T002 | Define Phase 1 orchestration flow (minimal path) | Pending |
-| T003 | Design Review Pack format and generation logic | Pending |
-| T004 | Design worker delegation and result aggregation | Pending |
+| T001 | Design Coordinator agent interface and types | Complete |
+| T002 | Define Phase 1 orchestration flow (minimal path) | Complete |
+| T003 | Design Review Pack format and generation logic | Complete |
+| T004 | Design worker delegation and result aggregation | Complete |
 | T005 | Document Coordinator architecture in module docs | Pending |
 
 ---
 
 ## T001: Coordinator Agent Interface & Types
+
+**Status:** Complete
+**Implementation:** `src/agents/coordinator/types.ts`, `src/agents/coordinator/coordinator.ts`
 
 Create `src/agents/coordinator/types.ts` and `src/agents/coordinator/coordinator.ts`:
 
@@ -154,6 +157,9 @@ class Coordinator extends Agent {
 
 ## T002: Phase 1 Orchestration Flow
 
+**Status:** Complete
+**Implementation:** `src/agents/coordinator/coordinator.ts`
+
 ### High-Level Flow Diagram
 
 ```
@@ -161,61 +167,106 @@ User starts session
         ↓
   ┌─────────────────────────────────────┐
   │  1. Initialize Session              │
-  │     - sessionId, timestamp           │
-  │     - Load user preferences          │
+  │     - createSession(sessionId,      │
+  │       username, householdId)        │
+  │     - status: 'initializing'        │
   └─────────────────────────────────────┘
         ↓
   ┌─────────────────────────────────────┐
-  │  2. Open Auchan.pt & Login          │
-  │     - Use Sprint-G-002 login tools   │
-  │     - Capture session screenshot     │
+  │  2. Authentication Check            │
+  │     - status: 'authenticating'      │
+  │     - Phase 1: Assumed logged in    │
+  │     - TODO: Login delegation later  │
   └─────────────────────────────────────┘
         ↓
   ┌─────────────────────────────────────┐
-  │  3. Delegate to CartBuilder          │
-  │     - Pass config (merge strategy)   │
-  │     - CartBuilder loads orders       │
-  │     - CartBuilder computes diff      │
-  │     - Returns CartBuilderResult      │
+  │  3. delegateToCartBuilder()         │
+  │     - status: 'loading_cart'        │
+  │     - createCartBuilderConfig()     │
+  │     - new CartBuilder(config)       │
+  │     - cartBuilder.run(context)      │
+  │     - Store result in session       │
   └─────────────────────────────────────┘
         ↓
   ┌─────────────────────────────────────┐
-  │  4. Generate Review Pack             │
-  │     - Aggregate worker results       │
-  │     - Format for user display        │
-  │     - Add confidence scores          │
+  │  4. generateReviewPack()            │
+  │     - status: 'generating_review'   │
+  │     - Transform CartDiffReport      │
+  │     - Map warnings to ReviewWarning │
+  │     - Calculate confidence scores   │
+  │     - Create default user actions   │
   └─────────────────────────────────────┘
         ↓
   ┌─────────────────────────────────────┐
-  │  5. Return Cart Ready for Review     │
-  │     - STOP (no order submission)     │
-  │     - Wait for user approval         │
+  │  5. Return Cart Ready for Review    │
+  │     - status: 'review_ready'        │
+  │     - STOP (no order submission)    │
+  │     - Wait for user approval        │
   └─────────────────────────────────────┘
 ```
 
-### State Machine
+### State Machine (Implemented)
+
+**States defined in `SessionStatusSchema`:**
 
 ```
-initializing → login_in_progress → loading_cart → generating_review → review_ready
-      ↓              ↓                   ↓               ↓                   ↓
-    error         error              error           error              success
-      ↓              ↓                   ↓               ↓                   ↓
-   cancelled     cancelled         cancelled       cancelled            (waiting)
+initializing → authenticating → loading_cart → generating_review → review_ready
+      ↓              ↓               ↓                ↓                  ↓
+    error          error           error            error             success
+      ↓              ↓               ↓                ↓                  ↓
+   cancelled     cancelled       cancelled        cancelled         completed
+                                                                   (after user
+                                                                    approval)
 ```
 
-### Key Decision Points
+**State transitions in `run()` method:**
+1. `createSession()` initializes with status `'initializing'`
+2. `updateStatus('authenticating')` - login check
+3. `updateStatus('loading_cart')` - before CartBuilder delegation
+4. `updateStatus('generating_review')` - after CartBuilder completes
+5. `updateStatus('review_ready')` - final state for user
+6. On error: `updateStatus('cancelled')` with error recorded
+
+### Orchestration Steps (Implemented)
+
+| Step | Method | Description |
+|------|--------|-------------|
+| 1 | `createSession()` | Factory function creates session with `initializing` status |
+| 2 | `updateStatus('authenticating')` | Phase 1: No actual login - assumed logged in |
+| 3 | `delegateToCartBuilder()` | Creates CartBuilder with config, runs it, stores result |
+| 4 | `generateReviewPack()` | Transforms CartDiffReport to ReviewPack format |
+| 5 | `updateStatus('review_ready')` | Session ready for user approval |
+
+### Key Decision Points (Phase 1 Scope)
 
 | Decision | Phase 1 Approach | Phase 2/3 Extension |
 |----------|-----------------|-------------------|
-| Multiple orders merge | Use 'latest' or 'combined' merge strategy | Phase 3: 'most-frequent' learning |
+| Worker delegation | Only CartBuilder | Substitution, StockPruner, SlotScout |
+| Authentication | Assumed logged in | Login delegation to login tools |
+| Multiple orders merge | `'latest'` or `'combined'` | Phase 3: `'most_frequent'` learning |
 | Out-of-stock items | Document in warnings | Phase 2: Substitution worker |
 | Delivery slots | Not included | Phase 2: SlotScout worker |
 | Household stock | Not checked | Phase 2: StockPruner worker |
 | User feedback | Not captured | Phase 3: Feedback loop |
 
+### Configuration Flags (Phase 2 Reserved)
+
+The following flags are defined in `CoordinatorConfigSchema` but default to `false`:
+
+```typescript
+enableSubstitution: z.boolean().default(false),  // Phase 2
+enableStockPruning: z.boolean().default(false),  // Phase 2
+enableSlotScouting: z.boolean().default(false),  // Phase 2
+```
+
+These flags enable Phase 2 workers when implemented.
+
 ---
 
 ## T003: Review Pack Format & Generation
+
+**Status:** Complete
+**Implementation:** `src/agents/coordinator/types.ts` (schemas), `src/agents/coordinator/coordinator.ts` (generation)
 
 ### Review Pack Structure
 
@@ -282,6 +333,9 @@ interface UserAction {
 
 ## T004: Worker Delegation & Result Aggregation
 
+**Status:** Complete
+**Implementation:** `src/agents/coordinator/coordinator.ts` (delegation methods)
+
 ### Delegation Pattern
 
 ```typescript
@@ -328,6 +382,22 @@ private async aggregateResults(): Promise<void> {
 }
 ```
 
+### Actual Implementation (Phase 1)
+
+The implemented `delegateToCartBuilder()` method in `coordinator.ts`:
+
+1. **Config Mapping**: Uses `createCartBuilderConfig()` factory to map CoordinatorConfig to CartBuilderConfig
+2. **Worker Instantiation**: Creates `new CartBuilder(config)` with the mapped config
+3. **Execution**: Calls `cartBuilder.run(context)` passing AgentContext
+4. **Result Capture**: Stores `CartBuilderWorkerResult` in `session.workers.cartBuilder`
+5. **Screenshot Collection**: Collects screenshots from CartBuilder report into session
+6. **Error Recording**: On failure, records error via `createError()` factory
+
+**Key Types Used:**
+- `CartBuilderWorkerResult` - Standardized worker result with success, durationMs, report/errorMessage
+- `createCartBuilderConfig()` - Factory function for config translation
+- `createError()` - Factory function for consistent error creation
+
 ---
 
 ## T005: Module Documentation
@@ -373,10 +443,10 @@ Create `docs/modules/coordinator.md`:
 
 ## Success Criteria
 
-- [ ] Coordinator types and interfaces defined with Zod validation
-- [ ] Phase 1 orchestration flow documented and diagrammed
-- [ ] Review Pack format designed for user approval workflow
-- [ ] Worker delegation pattern established (extensible for Phase 2)
+- [x] Coordinator types and interfaces defined with Zod validation
+- [x] Phase 1 orchestration flow documented and diagrammed
+- [x] Review Pack format designed for user approval workflow
+- [x] Worker delegation pattern established (extensible for Phase 2)
 - [ ] Module documentation complete and linked in main docs
 
 ---

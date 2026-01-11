@@ -1,0 +1,6 @@
+# Ignore all session files (contain sensitive data)
+*.json
+
+# Keep directory structure
+!.gitkeep
+!README.md

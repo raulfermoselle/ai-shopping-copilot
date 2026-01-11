@@ -124,6 +124,9 @@ export class LoginTool extends BaseTool<LoginInput, LoginResult> {
       throw new Error(`Login failed: ${errorMessage ?? 'Unknown error'}`);
     }
 
+    // Dismiss any popups that appear after login (subscription, notifications, etc.)
+    await this.dismissPopups(context);
+
     // Capture success screenshot
     await context.screenshot('login-success');
 

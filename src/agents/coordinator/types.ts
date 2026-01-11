@@ -20,6 +20,9 @@
 import { z } from 'zod';
 import type { CartDiffReport, CartBuilderConfig, CartItem as CBCartItem } from '../cart-builder/types.js';
 import type { AgentResult } from '../../types/agent.js';
+import type { AvailabilityResult, SubstitutionResult } from '../substitution/types.js';
+import type { StockPruneReport, RecommendedPrune, UncertainItem } from '../stock-pruner/types.js';
+import type { DaySlotGroup, RankedSlot } from '../slot-scout/types.js';
 
 // =============================================================================
 // Session State Types
@@ -116,34 +119,86 @@ export const CartBuilderWorkerResultSchema = z.object({
 export type CartBuilderWorkerResult = z.infer<typeof CartBuilderWorkerResultSchema>;
 
 /**
- * Placeholder for Phase 2 Substitution worker result.
+ * Substitution worker result stored in session.
+ * Contains availability checks and substitute recommendations.
  */
 export const SubstitutionWorkerResultSchema = z.object({
+  /** Whether Substitution worker succeeded */
   success: z.boolean(),
+  /** Time taken in milliseconds */
   durationMs: z.number(),
-  // Phase 2: Add substitution-specific fields
+  /** Availability results for all checked items */
+  availabilityResults: z.array(z.custom<AvailabilityResult>()).optional(),
+  /** Substitution results for unavailable items */
+  substitutionResults: z.array(z.custom<SubstitutionResult>()).optional(),
+  /** Summary statistics */
+  summary: z.object({
+    totalItems: z.number().int().nonnegative(),
+    availableItems: z.number().int().nonnegative(),
+    unavailableItems: z.number().int().nonnegative(),
+    itemsWithSubstitutes: z.number().int().nonnegative(),
+    itemsWithoutSubstitutes: z.number().int().nonnegative(),
+  }).optional(),
+  /** Error message if failed */
+  errorMessage: z.string().optional(),
 }).nullable();
 
 export type SubstitutionWorkerResult = z.infer<typeof SubstitutionWorkerResultSchema>;
 
 /**
- * Placeholder for Phase 2 StockPruner worker result.
+ * StockPruner worker result stored in session.
+ * Contains pruning recommendations based on purchase history.
  */
 export const StockPrunerWorkerResultSchema = z.object({
+  /** Whether StockPruner worker succeeded */
   success: z.boolean(),
+  /** Time taken in milliseconds */
   durationMs: z.number(),
-  // Phase 2: Add stock pruning-specific fields
+  /** Full pruning report */
+  report: z.custom<StockPruneReport>().optional(),
+  /** High-confidence items to remove */
+  recommendedRemovals: z.array(z.custom<RecommendedPrune>()).optional(),
+  /** Items with uncertain status (need user review) */
+  uncertainItems: z.array(z.custom<UncertainItem>()).optional(),
+  /** Summary statistics */
+  summary: z.object({
+    totalItems: z.number().int().nonnegative(),
+    suggestedForPruning: z.number().int().nonnegative(),
+    keepInCart: z.number().int().nonnegative(),
+    lowConfidenceDecisions: z.number().int().nonnegative(),
+  }).optional(),
+  /** Error message if failed */
+  errorMessage: z.string().optional(),
 }).nullable();
 
 export type StockPrunerWorkerResult = z.infer<typeof StockPrunerWorkerResultSchema>;
 
 /**
- * Placeholder for Phase 2 SlotScout worker result.
+ * SlotScout worker result stored in session.
+ * Contains delivery slot options ranked by preference.
  */
 export const SlotScoutWorkerResultSchema = z.object({
+  /** Whether SlotScout worker succeeded */
   success: z.boolean(),
+  /** Time taken in milliseconds */
   durationMs: z.number(),
-  // Phase 2: Add slot-specific fields
+  /** Slots grouped by day */
+  slotsByDay: z.array(z.custom<DaySlotGroup>()).optional(),
+  /** Top ranked slot options */
+  rankedSlots: z.array(z.custom<RankedSlot>()).optional(),
+  /** Summary statistics */
+  summary: z.object({
+    daysChecked: z.number().int().nonnegative(),
+    totalSlots: z.number().int().nonnegative(),
+    availableSlots: z.number().int().nonnegative(),
+    earliestAvailable: z.date().optional(),
+    cheapestDelivery: z.number().nonnegative().optional(),
+    freeDeliveryAvailable: z.boolean(),
+  }).optional(),
+  /** Minimum order value for delivery */
+  minimumOrder: z.number().nonnegative().optional(),
+  /** Error message if failed */
+  errorMessage: z.string().optional(),
 }).nullable();
 
 export type SlotScoutWorkerResult = z.infer<typeof SlotScoutWorkerResultSchema>;
@@ -415,13 +470,57 @@ export const ReviewPackSchema = z.object({
   /** Confidence scores */
   confidence: ReviewConfidenceSchema,
 
-  // Phase 2+ Extensions (reserved, not populated in Phase 1)
-  /** Substitution suggestions (Phase 2) */
-  substitutions: z.array(z.unknown()).optional(),
-  /** Stock pruning recommendations (Phase 2) */
-  pruning: z.array(z.unknown()).optional(),
-  /** Delivery slot options (Phase 2) */
-  slots: z.array(z.unknown()).optional(),
+  // Phase 2 Extensions
+  /** Substitution data (availability + suggestions) */
+  substitutions: z.object({
+    /** Availability results for all items */
+    availabilityResults: z.array(z.custom<AvailabilityResult>()),
+    /** Items with substitutes found */
+    substitutionResults: z.array(z.custom<SubstitutionResult>()),
+    /** Summary */
+    summary: z.object({
+      totalItems: z.number().int().nonnegative(),
+      availableItems: z.number().int().nonnegative(),
+      unavailableItems: z.number().int().nonnegative(),
+      itemsWithSubstitutes: z.number().int().nonnegative(),
+      itemsWithoutSubstitutes: z.number().int().nonnegative(),
+    }),
+  }).optional(),
+
+  /** Stock pruning recommendations */
+  pruning: z.object({
+    /** High-confidence items to remove */
+    recommendedRemovals: z.array(z.custom<RecommendedPrune>()),
+    /** Items needing user review */
+    uncertainItems: z.array(z.custom<UncertainItem>()),
+    /** Summary */
+    summary: z.object({
+      totalItems: z.number().int().nonnegative(),
+      suggestedForPruning: z.number().int().nonnegative(),
+      keepInCart: z.number().int().nonnegative(),
+    }),
+    /** Overall confidence */
+    overallConfidence: z.number().min(0).max(1),
+  }).optional(),
+
+  /** Delivery slot options */
+  slots: z.object({
+    /** Slots grouped by day */
+    slotsByDay: z.array(z.custom<DaySlotGroup>()),
+    /** Top ranked slots */
+    rankedSlots: z.array(z.custom<RankedSlot>()),
+    /** Summary */
+    summary: z.object({
+      daysChecked: z.number().int().nonnegative(),
+      totalSlots: z.number().int().nonnegative(),
+      availableSlots: z.number().int().nonnegative(),
+      earliestAvailable: z.date().optional(),
+      cheapestDelivery: z.number().nonnegative().optional(),
+      freeDeliveryAvailable: z.boolean(),
+    }),
+    /** Minimum order value for delivery */
+    minimumOrder: z.number().nonnegative().optional(),
+  }).optional(),
 });
 
 export type ReviewPack = z.infer<typeof ReviewPackSchema>;
@@ -615,3 +714,12 @@ export function createDefaultActions(): UserAction[] {
     },
   ];
 }
+
+// =============================================================================
+// Re-exports for Coordinator convenience
+// =============================================================================
+
+// Re-export types needed for worker inputs
+export type { CartSnapshot, CartDiffReport } from '../cart-builder/types.js';
+export type { PurchaseRecord } from '../stock-pruner/types.js';
+export type { SlotPreferences } from '../slot-scout/types.js';
