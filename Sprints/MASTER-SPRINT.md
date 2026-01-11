@@ -7,10 +7,10 @@
 
 | Field | Value |
 |-------|-------|
-| Last Updated | 2026-01-10 |
+| Last Updated | 2026-01-11 |
 | Project Version | 0.1.0 |
 | Framework Version | 2.0.0 |
-| Overall Status | Initializing |
+| Overall Status | In Progress |
 
 ## Recovery Entry Point
 
@@ -37,7 +37,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
-| main | [Sprint-G-001](./Global/Sprint-G-001/SPRINT-PLAN.md) | Completed | 2026-01-10 | 2026-01-10 |
+| main | [Sprint-G-002](./Global/Sprint-G-002/SPRINT-PLAN.md) | Completed | 2026-01-11 | 2026-01-11 |
 
 ---
 
@@ -45,8 +45,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Active Sprints | 1 |
-| Sprints This Week | 1 |
+| Total Active Sprints | 0 |
+| Sprints This Week | 2 |
 | Pending Merges | 0 |
 
 > **Note**: Per-branch metrics (deadlock counter, session state) are stored in `.sprint-state.local`
@@ -55,12 +55,10 @@
 
 ## Sprint Queue (Prioritized)
 
-### Priority 1 (Current)
-- **Sprint-G-001**: Project scaffolding, Playwright setup, TypeScript config
-
-### Priority 2 (Next)
-- Sprint-G-002: Auchan.pt login automation
-- Sprint-CB-R-001: Research Auchan.pt order history UI
+### Priority 1 (Next)
+- **Sprint-CB-R-001**: Research Auchan.pt order history UI
+- Sprint-SU-R-001: Research Auchan.pt product search
+- Sprint-SS-R-001: Research Auchan.pt delivery slots
 
 ### Backlog
 - See [SPRINT-PLANNING.md](./SPRINT-PLANNING.md) for full 27-sprint roadmap
@@ -74,6 +72,7 @@
 
 | Date | Branch | Sprint | Summary | Merged To |
 |------|--------|--------|---------|-----------|
+| 2026-01-11 | main | Sprint-G-002 | Auchan.pt login automation, session persistence | - |
 | 2026-01-10 | main | Sprint-G-001 | Project scaffolding, Playwright setup, TypeScript config | - |
 
 ---
@@ -124,11 +123,12 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 
 ## Notes for Next Session
 
-- **Sprint-G-001 completed** - Project scaffolding done
-- All development tooling in place (TypeScript, Playwright, Vitest, ESLint)
-- Next sprint: **Sprint-G-002** (Auchan.pt login automation)
-- Run `/sprint-start` to begin Sprint-G-002
+- **Sprint-G-002 completed** - Login automation ready
+- Login tool requires credentials (set AUCHAN_EMAIL, AUCHAN_PASSWORD)
+- Session persistence implemented for cookie reuse
+- Next: Test login with real credentials (headed browser)
+- Then: **Sprint-CB-R-001** (Research Auchan.pt order history UI)
 
 ---
 
-*Last Updated: 2026-01-10*
+*Last Updated: 2026-01-11*

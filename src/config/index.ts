@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { AppConfig } from '../types/config.js';
+import type { AppConfig, AuchanCredentials, SessionConfig } from '../types/config.js';
 
 /**
  * Zod schema for timeout configuration
@@ -73,6 +73,10 @@ const ENV_VARS = {
   AUCHAN_TIMEOUT_NAVIGATION: 'AUCHAN_TIMEOUT_NAVIGATION',
   AUCHAN_TIMEOUT_ELEMENT: 'AUCHAN_TIMEOUT_ELEMENT',
 
+  // Auchan credentials (never logged or stored in config files)
+  AUCHAN_EMAIL: 'AUCHAN_EMAIL',
+  AUCHAN_PASSWORD: 'AUCHAN_PASSWORD',
+
   // Browser settings
   BROWSER_HEADLESS: 'BROWSER_HEADLESS',
   BROWSER_SLOW_MO: 'BROWSER_SLOW_MO',
@@ -82,6 +86,9 @@ const ENV_VARS = {
   // Logging settings
   LOG_LEVEL: 'LOG_LEVEL',
   LOG_OUTPUT_DIR: 'LOG_OUTPUT_DIR',
+
+  // Session settings
+  SESSION_STORAGE_DIR: 'SESSION_STORAGE_DIR',
 } as const;
 
 /**
@@ -299,5 +306,79 @@ export function getLoggableConfig(config: AppConfig): Record<string, unknown> {
   return loggable;
 }
 
+/**
+ * Default session configuration
+ */
+const DEFAULT_SESSION_CONFIG: SessionConfig = {
+  storageDir: './sessions',
+  fileName: 'auchan-session.json',
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+};
+
+/**
+ * Get session configuration
+ *
+ * Session storage can be overridden via SESSION_STORAGE_DIR environment variable.
+ */
+export function getSessionConfig(): SessionConfig {
+  const storageDir = process.env[ENV_VARS.SESSION_STORAGE_DIR];
+
+  return {
+    ...DEFAULT_SESSION_CONFIG,
+    ...(storageDir !== undefined && storageDir !== '' ? { storageDir } : {}),
+  };
+}
+
+/**
+ * Load Auchan credentials from environment variables
+ *
+ * Credentials are NEVER stored in config files or logged.
+ * They are loaded fresh from environment each time to avoid
+ * accidental exposure through caching.
+ *
+ * @throws Error if credentials are not configured
+ */
+export function loadCredentials(): AuchanCredentials {
+  const email = process.env[ENV_VARS.AUCHAN_EMAIL];
+  const password = process.env[ENV_VARS.AUCHAN_PASSWORD];
+
+  if (email === undefined || email === '') {
+    throw new Error(
+      `Missing required environment variable: ${ENV_VARS.AUCHAN_EMAIL}\n` +
+        'Set this to your Auchan.pt account email address.'
+    );
+  }
+
+  if (password === undefined || password === '') {
+    throw new Error(
+      `Missing required environment variable: ${ENV_VARS.AUCHAN_PASSWORD}\n` +
+        'Set this to your Auchan.pt account password.'
+    );
+  }
+
+  return { email, password };
+}
+
+/**
+ * Check if credentials are configured (without loading them)
+ *
+ * Useful for checking availability before attempting login.
+ */
+export function hasCredentials(): boolean {
+  const email = process.env[ENV_VARS.AUCHAN_EMAIL];
+  const password = process.env[ENV_VARS.AUCHAN_PASSWORD];
+
+  return (
+    email !== undefined && email !== '' && password !== undefined && password !== ''
+  );
+}
+
 // Re-export types for convenience
-export type { AppConfig, AuchanConfig, BrowserConfig, LoggingConfig } from '../types/config.js';
+export type {
+  AppConfig,
+  AuchanConfig,
+  BrowserConfig,
+  LoggingConfig,
+  AuchanCredentials,
+  SessionConfig,
+} from '../types/config.js';

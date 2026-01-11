@@ -6,9 +6,10 @@
 
 export * from './browser.js';
 export * from './base-tool.js';
+export * from './login.js';
+export * from './session.js';
 
 // Additional tools will be implemented in future sprints:
-// - login
 // - load_last_orders
 // - merge_cart
 // - scan_cart

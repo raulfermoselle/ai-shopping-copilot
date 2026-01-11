@@ -4,6 +4,7 @@
  * Provides Playwright browser instance management for Auchan.pt automation.
  */
 
+import { existsSync } from 'node:fs';
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import type { BrowserConfig } from '../types/config.js';
 import { createLogger, Logger } from '../utils/logger.js';
@@ -22,14 +23,25 @@ const DEFAULT_CONFIG: BrowserConfig = {
 };
 
 /**
- * Launch a browser session configured for Auchan.pt
+ * Options for launching a browser session
  */
-export async function launchBrowser(
-  config: Partial<BrowserConfig> = {},
-  logger?: Logger
-): Promise<BrowserSession> {
-  const log = logger ?? createLogger('info', 'Browser');
-  const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+export interface LaunchOptions {
+  /** Browser configuration overrides */
+  config?: Partial<BrowserConfig>;
+  /** Path to session storage state file */
+  sessionPath?: string;
+  /** Logger instance */
+  logger?: Logger;
+}
+
+/**
+ * Launch a browser session configured for Auchan.pt
+ *
+ * Optionally restores session state from a previous session file.
+ */
+export async function launchBrowser(options: LaunchOptions = {}): Promise<BrowserSession> {
+  const log = options.logger ?? createLogger('info', 'Browser');
+  const mergedConfig = { ...DEFAULT_CONFIG, ...options.config };
 
   log.info('Launching browser', { headless: mergedConfig.headless });
 
@@ -38,14 +50,22 @@ export async function launchBrowser(
     slowMo: mergedConfig.slowMo,
   });
 
-  const context = await browser.newContext({
+  // Build context options
+  const contextOptions: Parameters<Browser['newContext']>[0] = {
     viewport: mergedConfig.viewport,
     locale: 'pt-PT',
     timezoneId: 'Europe/Lisbon',
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  });
+  };
 
+  // Restore session if path provided and file exists
+  if (options.sessionPath !== undefined && existsSync(options.sessionPath)) {
+    log.info('Restoring session state', { path: options.sessionPath });
+    contextOptions.storageState = options.sessionPath;
+  }
+
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
 
   log.info('Browser session created');
@@ -60,6 +80,21 @@ export async function launchBrowser(
       await browser.close();
     },
   };
+}
+
+/**
+ * Legacy function signature for backwards compatibility
+ * @deprecated Use launchBrowser({ config, logger }) instead
+ */
+export async function launchBrowserLegacy(
+  config: Partial<BrowserConfig> = {},
+  logger?: Logger
+): Promise<BrowserSession> {
+  const options: LaunchOptions = { config };
+  if (logger !== undefined) {
+    options.logger = logger;
+  }
+  return launchBrowser(options);
 }
 
 /**

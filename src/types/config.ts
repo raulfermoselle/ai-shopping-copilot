@@ -55,3 +55,27 @@ export interface LoggingConfig {
   /** Output directory for logs */
   outputDir: string;
 }
+
+/**
+ * Auchan credentials (loaded from environment only)
+ *
+ * These are never stored in config files or logged.
+ */
+export interface AuchanCredentials {
+  /** Auchan.pt account email */
+  email: string;
+  /** Auchan.pt account password */
+  password: string;
+}
+
+/**
+ * Session persistence configuration
+ */
+export interface SessionConfig {
+  /** Directory for session storage files */
+  storageDir: string;
+  /** Session file name */
+  fileName: string;
+  /** Maximum session age in milliseconds before re-login */
+  maxAge: number;
+}
