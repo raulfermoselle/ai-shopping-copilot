@@ -4,103 +4,50 @@ description: Show current sprint management status
 
 # Sprint Status
 
-Display the current state of sprint management including active sprint, recent completions, and any blockers.
+**Usage**: `/sprint-status`
 
-## Usage
+Display the current state of sprint management including active sprint, progress, recent completions, and queue.
 
-```
-/sprint-status
-```
+## Execution
 
----
+**Use the `sprint-manager` agent to execute this command.**
 
-## Information to Display
+The agent will read MASTER-SPRINT.md and active sprint files to report:
 
-### 1. Read MASTER-SPRINT.md
-
-Extract and display:
-
-**Project Overview**
-| Field | Value |
-|-------|-------|
-| Last Updated | [date] |
-| Project Version | [version] |
-| Overall Status | [status] |
-| Deadlock Counter | [count] |
-
-### 2. Active Sprint
-
-Show current sprint details:
-- Sprint ID and name
-- Status (Planning/Active/Blocked)
-- Focus area
-- Link to sprint plan
-
-### 3. Recent Completions
-
-List last 5 completed sprints:
-| Date | Sprint | Summary |
-|------|--------|---------|
-| ... | ... | ... |
-
-### 4. Sprint Queue
-
-Show upcoming work:
-- **Priority 1**: [Current focus]
-- **Priority 2**: [Next up]
-- **Backlog**: [Count] items
-
-### 5. Blockers & Exceptions
-
-If any exist, show:
-- Blocked sprints with reasons
-- Active exceptions from EXCEPTIONS-LOG.md
-
----
+1. **Active Sprint**: ID, goals, task progress (X/Y completed)
+2. **Recent Completions**: Last 3-5 completed sprints
+3. **Sprint Queue**: Next sprints in priority order
+4. **Blockers**: Any blocked tasks or sprints
 
 ## Output Format
 
 ```
-======================================================
-  Sprint Management Status
-======================================================
+## Sprint Status
 
-  Last Updated:    YYYY-MM-DD
-  Project Version: X.Y.Z
-  Overall Status:  [In Progress / Blocked / Idle]
-  Deadlock Count:  0
+**Active Sprint**: Sprint-{ID}
+- Goals: {summary}
+- Progress: X/Y tasks completed
+- Status: {In Progress / Blocked}
 
-------------------------------------------------------
-  Active Sprint
-------------------------------------------------------
-  Sprint-XX-name: [Focus]
-    Status: IN_PROGRESS
-    Tasks: X/Y completed
-    Link: Sprints/Active/Sprint-XX-name/
+**Recent Completions**:
+| Date | Sprint | Summary |
+|------|--------|---------|
+| ... | ... | ... |
 
-------------------------------------------------------
-  Recent Completions (Last 5)
-------------------------------------------------------
-  [YYYY-MM-DD] Sprint-XX: Summary
-  [YYYY-MM-DD] Sprint-XX: Summary
+**Queue**:
+1. Sprint-{next} - {description}
+2. Sprint-{after} - {description}
 
-------------------------------------------------------
-  Queue
-------------------------------------------------------
-  Priority 1: Sprint-XX - [Focus]
-  Priority 2: Sprint-XX - [Focus]
-  Backlog: X items
-
-======================================================
+**Quick Actions**:
+- `/sprint-start` - Continue active sprint
+- `/sprint-complete` - Complete current sprint
+- `/sprint-new` - Create new sprint
 ```
 
----
+## Files Read
 
-## Quick Actions
-
-After showing status, suggest relevant next steps:
-
-- If no active sprint: "Create a sprint with /sprint-new"
-- If sprint active: "Continue with /sprint-start"
-- If blockers exist: "Review EXCEPTIONS-LOG.md for blockers"
-- If sprint almost done: "Complete with /sprint-complete"
+| File | Information |
+|------|-------------|
+| `Sprints/MASTER-SPRINT.md` | Global state, queue, completions |
+| Active sprint's `SPRINT-PLAN.md` | Goals, tasks |
+| Active sprint's `SPRINT-LOG.md` | Progress, status |
