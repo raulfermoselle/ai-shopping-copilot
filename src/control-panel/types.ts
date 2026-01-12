@@ -10,6 +10,12 @@
  * - FormattedReviewPack: Display-ready Review Pack sections
  * - Renderer: Interface for CLI/Web implementations
  *
+ * Phase 3 Enhancements:
+ * - ConfidenceDisplay: Per-item confidence visualization
+ * - DecisionReasoning: Explanation for each cart decision
+ * - PreferenceDisplay: Active preferences affecting the run
+ * - ProgressState: Real-time worker status tracking
+ *
  * Integration:
  * - Uses existing Coordinator types for ReviewPack
  * - Maps Coordinator SessionStatus to display-friendly formats
@@ -844,3 +850,624 @@ export class ControlPanelError extends Error {
     this.context = context;
   }
 }
+
+// =============================================================================
+// Phase 3: Confidence Display Types
+// =============================================================================
+
+/**
+ * Confidence level category based on score thresholds.
+ * - high: score >= 0.8 (green)
+ * - medium: 0.5 <= score < 0.8 (yellow)
+ * - low: score < 0.5 (red)
+ */
+export const ConfidenceLevelSchema = z.enum(['high', 'medium', 'low']);
+export type ConfidenceLevel = z.infer<typeof ConfidenceLevelSchema>;
+
+/**
+ * Factor contributing to a confidence score.
+ * Each factor has a name and its contribution to the overall score.
+ */
+export const ConfidenceFactorSchema = z.object({
+  /** Factor name (e.g., "purchase_frequency", "recency", "price_stability") */
+  name: z.string(),
+  /** Contribution to overall score (-1 to 1, can be negative for detracting factors) */
+  contribution: z.number().min(-1).max(1),
+  /** Human-readable description of this factor */
+  description: z.string().optional(),
+});
+
+export type ConfidenceFactor = z.infer<typeof ConfidenceFactorSchema>;
+
+/**
+ * Confidence display data for a single item or decision.
+ * Shows score, level, and breakdown of contributing factors.
+ */
+export const ConfidenceDisplaySchema = z.object({
+  /** Overall confidence score (0-1) */
+  score: z.number().min(0).max(1),
+  /** Confidence level category */
+  level: ConfidenceLevelSchema,
+  /** Factors contributing to this score */
+  factors: z.array(ConfidenceFactorSchema),
+  /** Optional tooltip text for detailed explanation */
+  tooltip: z.string().optional(),
+});
+
+export type ConfidenceDisplay = z.infer<typeof ConfidenceDisplaySchema>;
+
+/**
+ * Get confidence level from a score.
+ */
+export function getConfidenceLevel(score: number): ConfidenceLevel {
+  if (score >= 0.8) return 'high';
+  if (score >= 0.5) return 'medium';
+  return 'low';
+}
+
+/**
+ * Get color code for confidence level (for UI rendering).
+ */
+export function getConfidenceColor(level: ConfidenceLevel): string {
+  switch (level) {
+    case 'high':
+      return 'green';
+    case 'medium':
+      return 'yellow';
+    case 'low':
+      return 'red';
+  }
+}
+
+/**
+ * Create a ConfidenceDisplay from a score and factors.
+ */
+export function createConfidenceDisplay(
+  score: number,
+  factors: ConfidenceFactor[] = []
+): ConfidenceDisplay {
+  const level = getConfidenceLevel(score);
+  const tooltip = factors.length > 0
+    ? factors.map((f) => `${f.name}: ${f.contribution > 0 ? '+' : ''}${(f.contribution * 100).toFixed(0)}%`).join(', ')
+    : undefined;
+
+  return {
+    score,
+    level,
+    factors,
+    tooltip,
+  };
+}
+
+// =============================================================================
+// Phase 3: Decision Reasoning Types
+// =============================================================================
+
+/**
+ * Decision type for cart items.
+ */
+export const DecisionTypeSchema = z.enum([
+  'added',
+  'removed',
+  'substituted',
+  'quantity_changed',
+  'kept',
+]);
+
+export type DecisionType = z.infer<typeof DecisionTypeSchema>;
+
+/**
+ * Reasoning explanation for a single cart decision.
+ * Each item in the cart can have an explanation for why it was added/removed/changed.
+ */
+export const DecisionReasoningSchema = z.object({
+  /** Unique identifier for the item */
+  itemId: z.string(),
+  /** Product name */
+  itemName: z.string(),
+  /** Type of decision made */
+  decision: DecisionTypeSchema,
+  /** Main reasoning explanation (human-readable) */
+  reasoning: z.string(),
+  /** Contributing factors as bullet points */
+  factors: z.array(z.string()),
+  /** Confidence in this decision */
+  confidence: ConfidenceDisplaySchema,
+  /** Source of this decision (which worker/agent) */
+  source: z.enum(['cart_builder', 'substitution', 'stock_pruner', 'coordinator', 'user']),
+  /** Timestamp when decision was made */
+  timestamp: z.coerce.date().optional(),
+});
+
+export type DecisionReasoning = z.infer<typeof DecisionReasoningSchema>;
+
+/**
+ * Comparison details for substitution decisions.
+ */
+export const SubstitutionComparisonSchema = z.object({
+  /** Original item name */
+  originalName: z.string(),
+  /** Substitute item name */
+  substituteName: z.string(),
+  /** Price difference (positive = more expensive) */
+  priceDifference: z.number(),
+  /** Unit price of original */
+  originalUnitPrice: z.number(),
+  /** Unit price of substitute */
+  substituteUnitPrice: z.number(),
+  /** Similarity score (0-1) */
+  similarityScore: z.number().min(0).max(1),
+  /** Key differences as bullet points */
+  differences: z.array(z.string()),
+  /** Why this substitute was chosen */
+  selectionReason: z.string(),
+});
+
+export type SubstitutionComparison = z.infer<typeof SubstitutionComparisonSchema>;
+
+/**
+ * Extended decision reasoning for substitution decisions.
+ */
+export const SubstitutionDecisionReasoningSchema = DecisionReasoningSchema.extend({
+  decision: z.literal('substituted'),
+  /** Detailed comparison between original and substitute */
+  comparison: SubstitutionComparisonSchema,
+});
+
+export type SubstitutionDecisionReasoning = z.infer<typeof SubstitutionDecisionReasoningSchema>;
+
+/**
+ * Pruning reasoning details.
+ */
+export const PruningReasoningSchema = z.object({
+  /** Item name */
+  itemName: z.string(),
+  /** Days since last purchase */
+  daysSinceLastPurchase: z.number().int().nonnegative(),
+  /** Typical restock cadence in days */
+  typicalCadenceDays: z.number().int().positive(),
+  /** Estimated days until item is needed */
+  estimatedDaysUntilNeeded: z.number().int(),
+  /** Reason for removal suggestion (e.g., "Purchased 3 days ago, typical cadence is 14 days") */
+  reason: z.string(),
+});
+
+export type PruningReasoning = z.infer<typeof PruningReasoningSchema>;
+
+// =============================================================================
+// Phase 3: Preference Display Types
+// =============================================================================
+
+/**
+ * Type of preference rule.
+ */
+export const PreferenceRuleTypeSchema = z.enum([
+  'brand_preference',
+  'category_exclusion',
+  'price_limit',
+  'quantity_default',
+  'substitute_rule',
+  'timing_preference',
+  'dietary_restriction',
+  'quality_tier',
+]);
+
+export type PreferenceRuleType = z.infer<typeof PreferenceRuleTypeSchema>;
+
+/**
+ * A single preference rule that can influence decisions.
+ */
+export const PreferenceRuleSchema = z.object({
+  /** Unique rule identifier */
+  id: z.string(),
+  /** Rule type */
+  type: PreferenceRuleTypeSchema,
+  /** Human-readable rule name */
+  name: z.string(),
+  /** Detailed description */
+  description: z.string(),
+  /** Whether this rule is currently active */
+  active: z.boolean(),
+  /** When this rule was created/learned */
+  createdAt: z.coerce.date(),
+  /** When this rule was last applied */
+  lastApplied: z.coerce.date().optional(),
+  /** Number of times this rule has been applied */
+  applicationCount: z.number().int().nonnegative().default(0),
+  /** Source: manual (user-defined) or learned (from history) */
+  source: z.enum(['manual', 'learned']),
+  /** Confidence in this rule (for learned rules) */
+  confidence: z.number().min(0).max(1).optional(),
+});
+
+export type PreferenceRule = z.infer<typeof PreferenceRuleSchema>;
+
+/**
+ * Record of a preference being applied to a decision.
+ */
+export const PreferenceApplicationSchema = z.object({
+  /** Reference to the preference rule */
+  ruleId: z.string(),
+  /** Rule name for display */
+  ruleName: z.string(),
+  /** Item affected */
+  itemId: z.string(),
+  /** Item name for display */
+  itemName: z.string(),
+  /** How the preference influenced the decision */
+  influence: z.string(),
+  /** Impact strength (0-1) */
+  impactStrength: z.number().min(0).max(1),
+});
+
+export type PreferenceApplication = z.infer<typeof PreferenceApplicationSchema>;
+
+/**
+ * Aggregated preference display for the current session.
+ */
+export const PreferenceDisplaySchema = z.object({
+  /** All active preference rules */
+  activeRules: z.array(PreferenceRuleSchema),
+  /** Preferences that influenced the current run */
+  appliedPreferences: z.array(PreferenceApplicationSchema),
+  /** Summary statistics */
+  summary: z.object({
+    /** Total rules available */
+    totalRules: z.number().int().nonnegative(),
+    /** Rules applied in this run */
+    rulesApplied: z.number().int().nonnegative(),
+    /** Items affected by preferences */
+    itemsAffected: z.number().int().nonnegative(),
+  }),
+});
+
+export type PreferenceDisplay = z.infer<typeof PreferenceDisplaySchema>;
+
+// =============================================================================
+// Phase 3: Progress State Types
+// =============================================================================
+
+/**
+ * Worker status in the session.
+ */
+export const WorkerStatusSchema = z.enum(['pending', 'running', 'complete', 'failed', 'skipped']);
+export type WorkerStatus = z.infer<typeof WorkerStatusSchema>;
+
+/**
+ * Individual worker progress information.
+ */
+export const WorkerProgressSchema = z.object({
+  /** Worker name */
+  name: z.string(),
+  /** Display name for UI */
+  displayName: z.string(),
+  /** Current status */
+  status: WorkerStatusSchema,
+  /** Progress percentage within this worker (0-100) */
+  progress: z.number().min(0).max(100).default(0),
+  /** Current action being performed */
+  currentAction: z.string().optional(),
+  /** Time started (if running or complete) */
+  startedAt: z.coerce.date().optional(),
+  /** Time completed (if complete or failed) */
+  completedAt: z.coerce.date().optional(),
+  /** Duration in milliseconds (if complete) */
+  durationMs: z.number().int().nonnegative().optional(),
+  /** Error message (if failed) */
+  errorMessage: z.string().optional(),
+  /** Items processed count */
+  itemsProcessed: z.number().int().nonnegative().optional(),
+  /** Total items to process */
+  totalItems: z.number().int().nonnegative().optional(),
+});
+
+export type WorkerProgress = z.infer<typeof WorkerProgressSchema>;
+
+/**
+ * Session phase for progress tracking.
+ */
+export const SessionPhaseSchema = z.enum([
+  'initializing',
+  'authenticating',
+  'loading_orders',
+  'building_cart',
+  'checking_availability',
+  'finding_substitutes',
+  'pruning_stock',
+  'scouting_slots',
+  'generating_review',
+  'review_ready',
+  'applying_changes',
+  'completed',
+  'cancelled',
+  'error',
+]);
+
+export type SessionPhase = z.infer<typeof SessionPhaseSchema>;
+
+/**
+ * Full progress state for the session.
+ * Provides real-time visibility into session execution.
+ */
+export const ProgressStateSchema = z.object({
+  /** Current phase of execution */
+  phase: SessionPhaseSchema,
+  /** Human-readable phase description */
+  phaseDescription: z.string(),
+  /** Overall progress percentage (0-100) */
+  progress: z.number().min(0).max(100),
+  /** Individual worker statuses */
+  workers: z.array(WorkerProgressSchema),
+  /** Current action being performed */
+  currentAction: z.string(),
+  /** Session start time */
+  startTime: z.coerce.date(),
+  /** Estimated completion time (if available) */
+  estimatedEndTime: z.coerce.date().optional(),
+  /** Estimated remaining seconds */
+  estimatedRemainingSeconds: z.number().int().nonnegative().optional(),
+  /** Last update timestamp */
+  lastUpdate: z.coerce.date(),
+});
+
+export type ProgressState = z.infer<typeof ProgressStateSchema>;
+
+/**
+ * Phase display information for UI.
+ */
+export interface PhaseDisplayInfo {
+  name: SessionPhase;
+  displayName: string;
+  description: string;
+  icon: string;
+  estimatedDurationSeconds: number;
+}
+
+/**
+ * Phase display configuration.
+ */
+export const PHASE_DISPLAY_INFO: Record<SessionPhase, PhaseDisplayInfo> = {
+  initializing: {
+    name: 'initializing',
+    displayName: 'Initializing',
+    description: 'Setting up session',
+    icon: 'setup',
+    estimatedDurationSeconds: 2,
+  },
+  authenticating: {
+    name: 'authenticating',
+    displayName: 'Authenticating',
+    description: 'Logging into Auchan',
+    icon: 'lock',
+    estimatedDurationSeconds: 5,
+  },
+  loading_orders: {
+    name: 'loading_orders',
+    displayName: 'Loading Orders',
+    description: 'Fetching order history',
+    icon: 'history',
+    estimatedDurationSeconds: 10,
+  },
+  building_cart: {
+    name: 'building_cart',
+    displayName: 'Building Cart',
+    description: 'Merging orders into cart',
+    icon: 'cart',
+    estimatedDurationSeconds: 15,
+  },
+  checking_availability: {
+    name: 'checking_availability',
+    displayName: 'Checking Availability',
+    description: 'Verifying item availability',
+    icon: 'check',
+    estimatedDurationSeconds: 20,
+  },
+  finding_substitutes: {
+    name: 'finding_substitutes',
+    displayName: 'Finding Substitutes',
+    description: 'Searching for alternatives',
+    icon: 'search',
+    estimatedDurationSeconds: 15,
+  },
+  pruning_stock: {
+    name: 'pruning_stock',
+    displayName: 'Analyzing Stock',
+    description: 'Checking household inventory',
+    icon: 'inventory',
+    estimatedDurationSeconds: 5,
+  },
+  scouting_slots: {
+    name: 'scouting_slots',
+    displayName: 'Finding Delivery Slots',
+    description: 'Checking delivery options',
+    icon: 'calendar',
+    estimatedDurationSeconds: 10,
+  },
+  generating_review: {
+    name: 'generating_review',
+    displayName: 'Generating Review',
+    description: 'Preparing review pack',
+    icon: 'document',
+    estimatedDurationSeconds: 3,
+  },
+  review_ready: {
+    name: 'review_ready',
+    displayName: 'Ready for Review',
+    description: 'Review pack is ready',
+    icon: 'ready',
+    estimatedDurationSeconds: 0,
+  },
+  applying_changes: {
+    name: 'applying_changes',
+    displayName: 'Applying Changes',
+    description: 'Updating cart with your choices',
+    icon: 'sync',
+    estimatedDurationSeconds: 10,
+  },
+  completed: {
+    name: 'completed',
+    displayName: 'Completed',
+    description: 'Session finished',
+    icon: 'success',
+    estimatedDurationSeconds: 0,
+  },
+  cancelled: {
+    name: 'cancelled',
+    displayName: 'Cancelled',
+    description: 'Session was cancelled',
+    icon: 'cancel',
+    estimatedDurationSeconds: 0,
+  },
+  error: {
+    name: 'error',
+    displayName: 'Error',
+    description: 'An error occurred',
+    icon: 'error',
+    estimatedDurationSeconds: 0,
+  },
+};
+
+/**
+ * Create initial progress state for a new session.
+ */
+export function createInitialProgressState(): ProgressState {
+  const now = new Date();
+  return {
+    phase: 'initializing',
+    phaseDescription: PHASE_DISPLAY_INFO.initializing.description,
+    progress: 0,
+    workers: [
+      { name: 'cart_builder', displayName: 'Cart Builder', status: 'pending', progress: 0 },
+      { name: 'substitution', displayName: 'Substitution', status: 'pending', progress: 0 },
+      { name: 'stock_pruner', displayName: 'Stock Pruner', status: 'pending', progress: 0 },
+      { name: 'slot_scout', displayName: 'Slot Scout', status: 'pending', progress: 0 },
+    ],
+    currentAction: 'Initializing session...',
+    startTime: now,
+    lastUpdate: now,
+  };
+}
+
+/**
+ * Calculate overall progress from worker states.
+ */
+export function calculateOverallProgress(workers: WorkerProgress[]): number {
+  if (workers.length === 0) return 0;
+
+  const weights: Record<string, number> = {
+    cart_builder: 0.4,
+    substitution: 0.25,
+    stock_pruner: 0.15,
+    slot_scout: 0.2,
+  };
+
+  let totalWeight = 0;
+  let weightedProgress = 0;
+
+  for (const worker of workers) {
+    const weight = weights[worker.name] ?? 0.25;
+    totalWeight += weight;
+
+    if (worker.status === 'complete') {
+      weightedProgress += weight * 100;
+    } else if (worker.status === 'running') {
+      weightedProgress += weight * worker.progress;
+    } else if (worker.status === 'skipped') {
+      // Skipped workers count as complete for progress
+      weightedProgress += weight * 100;
+    }
+  }
+
+  return totalWeight > 0 ? Math.round(weightedProgress / totalWeight) : 0;
+}
+
+// =============================================================================
+// Phase 3: Enhanced Review Pack Types
+// =============================================================================
+
+/**
+ * Enhanced item display with confidence and reasoning.
+ */
+export const EnhancedDisplayItemSchema = z.object({
+  /** Product ID */
+  productId: z.string().optional(),
+  /** Product name */
+  name: z.string(),
+  /** Quantity */
+  quantity: z.number().int().positive(),
+  /** Unit price formatted */
+  unitPrice: z.string(),
+  /** Total price formatted */
+  totalPrice: z.string(),
+  /** Source orders */
+  sourceOrders: z.array(z.string()).optional(),
+  /** Confidence in this item being correct */
+  confidence: ConfidenceDisplaySchema,
+  /** Decision reasoning */
+  reasoning: DecisionReasoningSchema.optional(),
+  /** Whether this item was influenced by preferences */
+  preferenceInfluenced: z.boolean().default(false),
+  /** Preferences that affected this item */
+  appliedPreferences: z.array(z.string()).optional(),
+});
+
+export type EnhancedDisplayItem = z.infer<typeof EnhancedDisplayItemSchema>;
+
+/**
+ * Enhanced Review Pack with Phase 3 features.
+ */
+export interface EnhancedFormattedReviewPack extends FormattedReviewPack {
+  /** Decision reasoning for all items */
+  decisions: DecisionReasoning[];
+  /** Active preferences display */
+  preferences: PreferenceDisplay;
+  /** Session progress state */
+  progressState: ProgressState;
+  /** Enhanced items with confidence and reasoning */
+  enhancedItems: {
+    added: EnhancedDisplayItem[];
+    removed: EnhancedDisplayItem[];
+    substituted: EnhancedDisplayItem[];
+    quantityChanged: EnhancedDisplayItem[];
+  };
+}
+
+// =============================================================================
+// Phase 3: API Response Types
+// =============================================================================
+
+/**
+ * Response for GET /api/session/{id}/progress endpoint.
+ */
+export const GetProgressResponseSchema = z.object({
+  sessionId: z.string(),
+  progress: ProgressStateSchema,
+});
+
+export type GetProgressResponse = z.infer<typeof GetProgressResponseSchema>;
+
+/**
+ * Response for GET /api/session/{id}/preferences endpoint.
+ */
+export const GetPreferencesResponseSchema = z.object({
+  sessionId: z.string(),
+  preferences: PreferenceDisplaySchema,
+});
+
+export type GetPreferencesResponse = z.infer<typeof GetPreferencesResponseSchema>;
+
+/**
+ * Response for GET /api/session/{id}/explanations endpoint.
+ */
+export const GetExplanationsResponseSchema = z.object({
+  sessionId: z.string(),
+  explanations: z.array(DecisionReasoningSchema),
+  summary: z.object({
+    totalDecisions: z.number().int().nonnegative(),
+    highConfidence: z.number().int().nonnegative(),
+    mediumConfidence: z.number().int().nonnegative(),
+    lowConfidence: z.number().int().nonnegative(),
+  }),
+});
+
+export type GetExplanationsResponse = z.infer<typeof GetExplanationsResponseSchema>;

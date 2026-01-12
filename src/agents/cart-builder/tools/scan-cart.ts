@@ -15,7 +15,7 @@ import type { Tool, ToolResult, ToolError } from '../../../types/tool.js';
 import type { ScanCartInput, ScanCartOutput } from './types.js';
 import type { CartSnapshot, CartItem } from '../types.js';
 import { createSelectorResolver } from '../../../selectors/resolver.js';
-import { dismissSubscriptionPopup } from '../../../utils/popup-handler.js';
+import { dismissPopups } from '../../../utils/popup-handler.js';
 
 /**
  * Default cart URL
@@ -83,10 +83,36 @@ export const scanCartTool: Tool<ScanCartInput, ScanCartOutput> = {
         context.logger.debug('Already on cart page');
       }
 
-      // Dismiss any subscription/notification popups
-      const popupDismissed = await dismissSubscriptionPopup(context.page, { logger: context.logger });
-      if (popupDismissed) {
-        context.logger.info('Dismissed subscription popup on cart page');
+      // CRITICAL: Aggressively dismiss ALL blocking popups
+      // Cart page often has multiple popups overlapping (subscription + cart removal confirmation)
+      context.logger.info('Dismissing all blocking popups on cart page');
+      let totalDismissed = 0;
+
+      // Run popup dismissal up to 3 times to handle cascading popups
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const dismissed = await dismissPopups(context.page, {
+          timeout: 2000,
+          verbose: true,
+          logger: context.logger,
+        });
+        totalDismissed += dismissed;
+
+        if (dismissed === 0) {
+          context.logger.debug('No more popups found', { attempt, totalDismissed });
+          break;
+        }
+
+        context.logger.info(`Dismissed ${dismissed} popup(s) on attempt ${attempt}`, {
+          attempt,
+          totalDismissed,
+        });
+
+        // Wait for any new popups to appear after dismissing previous ones
+        await context.page.waitForTimeout(1000);
+      }
+
+      if (totalDismissed > 0) {
+        context.logger.info(`Total popups dismissed on cart page: ${totalDismissed}`);
       }
 
       const finalUrl = context.page.url();
@@ -155,10 +181,41 @@ export const scanCartTool: Tool<ScanCartInput, ScanCartOutput> = {
       // Step 4: Extract cart items
       const items: CartItem[] = [];
 
-      // Find all cart item elements
-      const itemElements = await context.page.locator(
-        resolver.buildCompositeSelector('cart', 'cartItem') || '.auc-cart__product, .cart-item'
-      ).all();
+      // CRITICAL: Scope cart items to ONLY items inside cart list container
+      // Do NOT match product recommendations at bottom of page
+      // Strategy: Find the cart container FIRST, then get items within it
+      // This prevents matching the 574 product recommendations that share similar classes
+
+      // Try to find the main cart container using multiple strategies
+      const cartContainerSelectors = [
+        '.auc-cart__list',
+        '.auc-cart-list',
+        '[data-testid="cart-items"]',
+        '.cart-items-container',
+        'main .cart-list',
+        // Fallback: get the first section that has cart products
+        'section:has(.auc-cart__product)',
+      ];
+
+      let cartContainer = null;
+      for (const containerSelector of cartContainerSelectors) {
+        const container = context.page.locator(containerSelector).first();
+        const exists = await container.count().catch(() => 0);
+        if (exists > 0) {
+          cartContainer = container;
+          context.logger.debug('Found cart container', { selector: containerSelector });
+          break;
+        }
+      }
+
+      if (!cartContainer) {
+        context.logger.warn('Cart container not found, using fallback document-wide selector');
+        cartContainer = context.page.locator('body');
+      }
+
+      // Now find items WITHIN the cart container
+      // Use the Auchan-specific product class
+      const itemElements = await cartContainer.locator('.auc-cart__product').all();
 
       context.logger.info('Found cart items', { count: itemElements.length });
 

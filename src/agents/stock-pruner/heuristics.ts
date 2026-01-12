@@ -10,6 +10,7 @@
  * - Restock cadence calculation from purchase history
  * - Days until restock estimation
  * - Pruning decision with confidence scoring
+ * - Adaptive learning integration for household-specific patterns
  */
 
 import {
@@ -25,6 +26,15 @@ import {
   type UserOverride,
   type ItemPurchaseHistory,
 } from './types.js';
+import {
+  type LearningState,
+  type AdaptiveCadenceConfig,
+  calculateAdaptiveCadence,
+  calculateConfidenceAdjustment,
+  makeConservativePruneDecision,
+  updateStateWithPrediction,
+  createDefaultAdaptiveCadenceConfig,
+} from './learning/index.js';
 
 // =============================================================================
 // Result Types for Pure Functions
@@ -874,4 +884,340 @@ export function summarizeDecisions(decisions: PruneDecision[]): PruningSummary {
     byReason,
     byCategory: byCategory as Record<ProductCategory, number>,
   };
+}
+
+// =============================================================================
+// Adaptive Learning Integration
+// =============================================================================
+
+/**
+ * Result of processing cart items with adaptive learning.
+ */
+export interface ProcessWithLearningResult {
+  /** Pruning decisions */
+  decisions: PruneDecision[];
+  /** Updated learning state with new predictions */
+  updatedLearningState: LearningState;
+  /** Number of new predictions recorded */
+  newPredictions: number;
+  /** Items flagged for review due to uncertainty */
+  flaggedForReview: string[];
+}
+
+/**
+ * Process cart items with adaptive learning integration.
+ *
+ * This function enhances the basic pruning with:
+ * - Learned cadences from prediction history
+ * - Confidence adjustments based on accuracy
+ * - Conservative decision-making when uncertain
+ * - Recording new predictions for future learning
+ *
+ * @param items - Cart items to analyze
+ * @param purchaseHistory - Full purchase history
+ * @param config - Pruner configuration
+ * @param learningState - Current learning state
+ * @param adaptiveConfig - Adaptive learning configuration
+ * @param userOverrides - User overrides by productId or name
+ * @param referenceDate - Reference date for timing
+ * @returns Decisions and updated learning state
+ *
+ * @example
+ * const result = processCartItemsWithLearning(
+ *   cartItems,
+ *   purchaseHistory,
+ *   config,
+ *   learningState,
+ *   adaptiveConfig,
+ *   userOverrides,
+ *   new Date()
+ * );
+ * // result.decisions - pruning decisions with adaptive confidence
+ * // result.updatedLearningState - state with new predictions recorded
+ */
+export function processCartItemsWithLearning(
+  items: CartItemForPruning[],
+  purchaseHistory: PurchaseRecord[],
+  config: StockPrunerConfig,
+  learningState: LearningState,
+  adaptiveConfig: AdaptiveCadenceConfig = createDefaultAdaptiveCadenceConfig(),
+  userOverrides: Map<string, UserOverride> = new Map(),
+  referenceDate: Date = new Date()
+): ProcessWithLearningResult {
+  // Find duplicates first
+  const duplicates = findDuplicatesInCart(items);
+
+  let currentLearningState = learningState;
+  let newPredictions = 0;
+  const flaggedForReview: string[] = [];
+
+  const decisions = items.map((item, index) => {
+    // Check if this is a duplicate (not the first occurrence)
+    for (const [, dupIndices] of duplicates) {
+      if (dupIndices.includes(index)) {
+        return createPruneDecision(
+          item,
+          true,
+          0.95,
+          PruneReason.DUPLICATE_IN_CART,
+          {
+            daysSinceLastPurchase: undefined,
+            restockCadenceDays: 0,
+            restockUrgencyRatio: undefined,
+            category: ProductCategory.UNKNOWN,
+            lastPurchaseDate: undefined,
+            cadenceSource: 'no-history',
+          }
+        );
+      }
+    }
+
+    // Get user override
+    const overrideKey = item.productId ?? normalizeText(item.name);
+    const override = userOverrides.get(overrideKey);
+
+    // Find history for this item
+    const itemHistory = findItemHistory(item, purchaseHistory);
+
+    // Detect category
+    const categoryResult = detectCategory(item.name);
+    const category = categoryResult.category;
+
+    // Calculate adaptive cadence
+    const adaptiveCadence = calculateAdaptiveCadence(
+      currentLearningState,
+      item.productId,
+      item.name,
+      category,
+      adaptiveConfig,
+      referenceDate
+    );
+
+    // Generate base decision using adaptive cadence
+    const baseDecision = shouldPruneItemWithAdaptiveCadence(
+      item,
+      itemHistory,
+      config,
+      adaptiveCadence.cadenceDays,
+      adaptiveCadence.source,
+      override,
+      referenceDate
+    );
+
+    // Apply conservative decision-making if enabled
+    let finalDecision = baseDecision;
+    if (adaptiveConfig.conservativeMode) {
+      const conservativeResult = makeConservativePruneDecision(
+        currentLearningState,
+        item.productId,
+        item.name,
+        category,
+        baseDecision.prune,
+        baseDecision.confidence,
+        adaptiveConfig
+      );
+
+      if (conservativeResult.shouldPrune !== baseDecision.prune ||
+          conservativeResult.confidence !== baseDecision.confidence) {
+        // Apply conservative adjustments
+        finalDecision = {
+          ...baseDecision,
+          prune: conservativeResult.shouldPrune,
+          confidence: conservativeResult.confidence,
+          reason: `${baseDecision.reason} [Adjusted: ${conservativeResult.reasoning.join('; ')}]`,
+        };
+      }
+
+      if (conservativeResult.flagForReview) {
+        flaggedForReview.push(item.name);
+      }
+    } else {
+      // Apply confidence adjustment without conservative decision override
+      const confidenceResult = calculateConfidenceAdjustment(
+        currentLearningState,
+        item.productId,
+        item.name,
+        category,
+        baseDecision.confidence,
+        adaptiveConfig,
+        referenceDate
+      );
+
+      if (confidenceResult.confidence !== baseDecision.confidence) {
+        finalDecision = {
+          ...baseDecision,
+          confidence: confidenceResult.confidence,
+          reason: `${baseDecision.reason} [${confidenceResult.explanation}]`,
+        };
+      }
+
+      if (confidenceResult.flagForReview) {
+        flaggedForReview.push(item.name);
+      }
+    }
+
+    // Record prediction for learning
+    if (finalDecision.prune && finalDecision.context.restockCadenceDays > 0) {
+      const updateResult = updateStateWithPrediction(
+        currentLearningState,
+        item.productId,
+        item.name,
+        category,
+        finalDecision.context.restockCadenceDays,
+        `session-${Date.now()}`, // Session ID placeholder
+        referenceDate
+      );
+      currentLearningState = updateResult.state;
+      newPredictions++;
+    }
+
+    return finalDecision;
+  });
+
+  return {
+    decisions,
+    updatedLearningState: currentLearningState,
+    newPredictions,
+    flaggedForReview,
+  };
+}
+
+/**
+ * Decide whether to prune an item using adaptive cadence.
+ *
+ * Similar to shouldPruneItem but uses a pre-calculated adaptive cadence
+ * instead of calculating from history.
+ */
+function shouldPruneItemWithAdaptiveCadence(
+  item: CartItemForPruning,
+  purchaseHistory: ItemPurchaseHistory | null,
+  config: StockPrunerConfig,
+  adaptiveCadence: number,
+  cadenceSource: 'learned' | 'category-default',
+  userOverride?: UserOverride,
+  referenceDate: Date = new Date()
+): PruneDecision {
+  // Check user overrides first
+  if (userOverride?.alwaysPrune) {
+    return createPruneDecision(item, true, 1.0, PruneReason.USER_PREFERENCE_EXCLUDE, {
+      daysSinceLastPurchase: undefined,
+      restockCadenceDays: 0,
+      restockUrgencyRatio: undefined,
+      category: ProductCategory.UNKNOWN,
+      lastPurchaseDate: undefined,
+      cadenceSource: 'user-override',
+    });
+  }
+
+  if (userOverride?.neverPrune) {
+    return createPruneDecision(item, false, 1.0, PruneReason.NO_HISTORY, {
+      daysSinceLastPurchase: undefined,
+      restockCadenceDays: 0,
+      restockUrgencyRatio: undefined,
+      category: ProductCategory.UNKNOWN,
+      lastPurchaseDate: undefined,
+      cadenceSource: 'user-override',
+    });
+  }
+
+  // Detect category
+  const categoryResult = detectCategory(item.name);
+  const category = categoryResult.category;
+
+  // Use user override cadence if provided
+  const cadenceDays = userOverride?.customCadenceDays ?? adaptiveCadence;
+  const source: RestockCadenceSource = userOverride?.customCadenceDays
+    ? 'user-override'
+    : cadenceSource;
+
+  // Get last purchase date
+  const lastPurchaseDate = purchaseHistory?.lastPurchaseDate
+    ? new Date(purchaseHistory.lastPurchaseDate)
+    : null;
+
+  // Estimate restock timing
+  const timingResult = estimateRestockTiming(lastPurchaseDate, cadenceDays, referenceDate);
+
+  // Build decision context
+  const context: PruneDecisionContext = {
+    daysSinceLastPurchase: lastPurchaseDate ? timingResult.daysSincePurchase : undefined,
+    restockCadenceDays: cadenceDays,
+    restockUrgencyRatio: lastPurchaseDate ? timingResult.urgencyRatio : undefined,
+    category,
+    lastPurchaseDate: lastPurchaseDate ?? undefined,
+    cadenceSource: source,
+  };
+
+  // No history - keep in cart (conservative)
+  if (!lastPurchaseDate) {
+    return createPruneDecision(
+      item,
+      false,
+      0.4,
+      PruneReason.NO_HISTORY,
+      context
+    );
+  }
+
+  // Apply pruning thresholds
+  const urgencyRatio = timingResult.urgencyRatio;
+
+  // Overdue - definitely keep
+  if (urgencyRatio >= 1.0) {
+    return createPruneDecision(
+      item,
+      false,
+      0.9,
+      PruneReason.OVERDUE_RESTOCK,
+      context
+    );
+  }
+
+  // Approaching restock time - uncertain
+  if (urgencyRatio >= config.uncertainThreshold) {
+    const confidence = 0.5 + (1 - urgencyRatio) * 0.3;
+    return createPruneDecision(
+      item,
+      false,
+      confidence,
+      PruneReason.APPROACHING_RESTOCK,
+      context
+    );
+  }
+
+  // Below prune threshold - suggest pruning
+  if (urgencyRatio < config.pruneThreshold) {
+    // Higher confidence when using learned cadence
+    const sourceBonus = cadenceSource === 'learned' ? 0.1 : 0;
+    const baseConfidence = 0.6 + (config.pruneThreshold - urgencyRatio) * 0.5 + sourceBonus;
+    const confidence = Math.min(baseConfidence, 0.95);
+
+    // Conservative mode requires higher confidence
+    if (config.conservativeMode && confidence < config.minPruneConfidence) {
+      return createPruneDecision(
+        item,
+        false,
+        confidence,
+        PruneReason.ADEQUATE_STOCK,
+        context
+      );
+    }
+
+    return createPruneDecision(
+      item,
+      true,
+      confidence,
+      PruneReason.RECENTLY_PURCHASED,
+      context
+    );
+  }
+
+  // Between prune and uncertain threshold - moderate confidence keep
+  return createPruneDecision(
+    item,
+    false,
+    0.6,
+    PruneReason.ADEQUATE_STOCK,
+    context
+  );
 }

@@ -12,6 +12,11 @@
  * - POST /api/coordinator/session/:id/approve - Approve cart
  * - POST /api/coordinator/session/:id/cancel - Cancel session
  *
+ * Phase 3 New Endpoints:
+ * - GET  /api/coordinator/session/:id/progress - Real-time progress
+ * - GET  /api/coordinator/session/:id/preferences - Active preferences
+ * - GET  /api/coordinator/session/:id/explanations - Decision explanations
+ *
  * Design:
  * - Handlers return framework-agnostic HandlerResult objects
  * - Zod validation for all inputs
@@ -45,6 +50,22 @@ import {
   statusToProgress,
   toApiError,
 } from './types.js';
+import type {
+  GetProgressResponse,
+  GetPreferencesResponse,
+  GetExplanationsResponse,
+  ProgressState,
+  DecisionReasoning,
+  PreferenceDisplay,
+} from '../control-panel/types.js';
+import {
+  createInitialProgressState,
+  preferenceDisplayBuilder,
+  createSamplePreferenceRules,
+  createSampleApplications,
+  createAddedFromOrderReasoning,
+  createSubstitutionReasoning,
+} from '../control-panel/components/index.js';
 
 // =============================================================================
 // Session Storage (In-Memory)
@@ -64,6 +85,14 @@ interface SessionRecord {
   runPromise?: Promise<void>;
   /** Any pending modifications from approval */
   pendingModifications?: CartModification[];
+
+  // Phase 3: Enhanced tracking
+  /** Real-time progress state */
+  progressState: ProgressState;
+  /** Decision explanations */
+  explanations: DecisionReasoning[];
+  /** Active preferences */
+  preferences: PreferenceDisplay;
 }
 
 /**
@@ -225,6 +254,14 @@ export async function handleStartSession(
       : undefined;
     const coordinator = createCoordinator(cleanConfig);
 
+    // Phase 3: Initialize preferences (in production, load from persistence)
+    const sampleRules = createSamplePreferenceRules();
+    const sampleApplications = createSampleApplications();
+    const preferences = preferenceDisplayBuilder()
+      .addRules(sampleRules)
+      .recordApplications(sampleApplications)
+      .build();
+
     // Create initial session record
     const record: SessionRecord = {
       session: {
@@ -245,6 +282,11 @@ export async function handleStartSession(
       },
       coordinator,
       running: true,
+
+      // Phase 3: Initialize enhanced tracking
+      progressState: createInitialProgressState(),
+      explanations: [],
+      preferences,
     };
 
     sessions.set(sessionId, record);
@@ -665,10 +707,21 @@ export function injectMockSession(
     ...session,
   };
 
+  // Phase 3: Initialize with sample preferences
+  const sampleRules = createSamplePreferenceRules();
+  const sampleApplications = createSampleApplications();
+  const preferences = preferenceDisplayBuilder()
+    .addRules(sampleRules)
+    .recordApplications(sampleApplications)
+    .build();
+
   sessions.set(sessionId, {
     session: fullSession,
     coordinator: coordinator ?? createCoordinator(),
     running: false,
+    progressState: createInitialProgressState(),
+    explanations: [],
+    preferences,
   });
 }
 
@@ -677,4 +730,156 @@ export function injectMockSession(
  */
 export function getSessionRecord(sessionId: string): SessionRecord | undefined {
   return sessions.get(sessionId);
+}
+
+// =============================================================================
+// Phase 3: New API Handlers
+// =============================================================================
+
+/**
+ * Get real-time progress state for a session.
+ *
+ * Returns the current phase, worker statuses, and time estimates.
+ * Used for polling to update the progress UI.
+ *
+ * @param sessionId - Session ID from URL parameter
+ * @returns HandlerResult with progress state
+ */
+export async function handleGetProgress(
+  sessionId: string
+): Promise<HandlerResult<{ success: true; data: GetProgressResponse } | ApiErrorResponse>> {
+  const recordOrError = getSessionOrError(sessionId);
+  if (isErrorResult(recordOrError)) {
+    return recordOrError;
+  }
+
+  const record = recordOrError;
+
+  return successResponse<GetProgressResponse>(200, {
+    sessionId,
+    progress: record.progressState,
+  });
+}
+
+/**
+ * Get active preferences for a session.
+ *
+ * Returns the preference rules affecting the session and which items they influenced.
+ *
+ * @param sessionId - Session ID from URL parameter
+ * @returns HandlerResult with preference display
+ */
+export async function handleGetPreferences(
+  sessionId: string
+): Promise<HandlerResult<{ success: true; data: GetPreferencesResponse } | ApiErrorResponse>> {
+  const recordOrError = getSessionOrError(sessionId);
+  if (isErrorResult(recordOrError)) {
+    return recordOrError;
+  }
+
+  const record = recordOrError;
+
+  return successResponse<GetPreferencesResponse>(200, {
+    sessionId,
+    preferences: record.preferences,
+  });
+}
+
+/**
+ * Get decision explanations for a session.
+ *
+ * Returns explanations for each cart decision (added, removed, substituted, etc.)
+ * with confidence scores and factor breakdowns.
+ *
+ * @param sessionId - Session ID from URL parameter
+ * @returns HandlerResult with decision explanations
+ */
+export async function handleGetExplanations(
+  sessionId: string
+): Promise<HandlerResult<{ success: true; data: GetExplanationsResponse } | ApiErrorResponse>> {
+  const recordOrError = getSessionOrError(sessionId);
+  if (isErrorResult(recordOrError)) {
+    return recordOrError;
+  }
+
+  const record = recordOrError;
+
+  // If session has a review pack but no explanations, generate them
+  if (record.explanations.length === 0 && record.session.reviewPack) {
+    record.explanations = generateExplanationsFromReviewPack(
+      sessionId,
+      record.session.reviewPack
+    );
+  }
+
+  const explanations = record.explanations;
+  const highConfidence = explanations.filter((e) => e.confidence.level === 'high').length;
+  const mediumConfidence = explanations.filter((e) => e.confidence.level === 'medium').length;
+  const lowConfidence = explanations.filter((e) => e.confidence.level === 'low').length;
+
+  return successResponse<GetExplanationsResponse>(200, {
+    sessionId,
+    explanations,
+    summary: {
+      totalDecisions: explanations.length,
+      highConfidence,
+      mediumConfidence,
+      lowConfidence,
+    },
+  });
+}
+
+/**
+ * Generate decision explanations from a review pack.
+ * In production, this would be done by the workers during execution.
+ */
+function generateExplanationsFromReviewPack(
+  _sessionId: string,
+  reviewPack: NonNullable<CoordinatorSession['reviewPack']>
+): DecisionReasoning[] {
+  const explanations: DecisionReasoning[] = [];
+
+  // Explain items in cart
+  for (const item of reviewPack.cart.after) {
+    explanations.push(
+      createAddedFromOrderReasoning(
+        `item-${item.name.replace(/\s+/g, '-').toLowerCase()}`,
+        item.name,
+        reviewPack.confidence.sourceOrders,
+        reviewPack.confidence.sourceOrders.length,
+        reviewPack.confidence.sourceOrders.length,
+        item.quantity
+      )
+    );
+  }
+
+  // Explain substitutions if present
+  if (reviewPack.substitutions) {
+    for (const sub of reviewPack.substitutions.substitutionResults) {
+      if (sub.substitutes.length > 0) {
+        const bestSub = sub.substitutes[0];
+        if (bestSub) {
+          explanations.push(
+            createSubstitutionReasoning(
+              `sub-${sub.originalProduct.name.replace(/\s+/g, '-').toLowerCase()}`,
+              sub.originalProduct.name,
+              bestSub.candidate.name,
+              {
+                originalName: sub.originalProduct.name,
+                substituteName: bestSub.candidate.name,
+                priceDifference: bestSub.priceDelta,
+                originalUnitPrice: bestSub.candidate.unitPrice - bestSub.priceDelta,
+                substituteUnitPrice: bestSub.candidate.unitPrice,
+                similarityScore: bestSub.score.overall,
+                differences: [bestSub.reason],
+                selectionReason: bestSub.reason || 'Best available substitute',
+              }
+            )
+          );
+        }
+      }
+    }
+  }
+
+  return explanations;
 }

@@ -33,6 +33,7 @@ import type {
   SubstitutionWorkerResult,
   StockPrunerWorkerResult,
   SlotScoutWorkerResult,
+  FeedbackStatus,
 } from './types.js';
 import {
   CoordinatorConfigSchema,
@@ -52,6 +53,15 @@ import type { CartSnapshot } from '../cart-builder/types.js';
 import type { SubstitutionWorkerInput } from '../substitution/types.js';
 import type { PurchaseRecord } from '../stock-pruner/types.js';
 import type { SlotScoutInput } from '../slot-scout/types.js';
+import {
+  type FeedbackCollector,
+  createFeedbackCollector,
+  createFeedbackProcessor,
+  type SubmitItemFeedbackInput,
+  type SessionFeedback,
+  type FeedbackSubmissionResult,
+  type FeedbackProcessingResult,
+} from './feedback/index.js';
 
 /**
  * Coordinator Agent
@@ -1135,6 +1145,231 @@ export class Coordinator {
       default:
         return 'data_quality';
     }
+  }
+
+  // ===========================================================================
+  // Phase 3: Feedback Methods
+  // ===========================================================================
+
+  /**
+   * Create a feedback collector for the current session.
+   * Should be called after the session reaches review_ready or completed state.
+   *
+   * IMPORTANT: This method enforces the "zero questioning during run" principle.
+   * Feedback can only be collected after the run completes.
+   *
+   * @returns FeedbackCollector instance configured for this session
+   */
+  createFeedbackCollector(): FeedbackCollector | null {
+    if (!this.session) {
+      return null;
+    }
+
+    // Enforce post-run feedback principle
+    if (this.session.status !== 'review_ready' && this.session.status !== 'completed') {
+      return null;
+    }
+
+    const collector = createFeedbackCollector({
+      householdId: this.session.householdId,
+    });
+
+    // Set the active session for context
+    collector.setActiveSession(this.session);
+
+    return collector;
+  }
+
+  /**
+   * Submit feedback for an item in the current session.
+   *
+   * @param input - Item feedback input
+   * @returns Submission result
+   */
+  async submitFeedback(input: SubmitItemFeedbackInput): Promise<FeedbackSubmissionResult> {
+    if (!this.session) {
+      return {
+        success: false,
+        error: 'No active session',
+      };
+    }
+
+    // Enforce post-run feedback principle
+    if (this.session.status !== 'review_ready' && this.session.status !== 'completed') {
+      return {
+        success: false,
+        error: 'Feedback can only be submitted after the run completes',
+      };
+    }
+
+    const collector = createFeedbackCollector({
+      householdId: this.session.householdId,
+    });
+    collector.setActiveSession(this.session);
+
+    const result = await collector.submitItemFeedback({
+      ...input,
+      sessionId: this.session.sessionId,
+    });
+
+    // Update session feedback summary
+    if (result.success) {
+      this.updateFeedbackSummary();
+    }
+
+    return result;
+  }
+
+  /**
+   * Get feedback for the current session.
+   *
+   * @returns Session feedback or null
+   */
+  async getFeedback(): Promise<SessionFeedback | null> {
+    if (!this.session) {
+      return null;
+    }
+
+    const collector = createFeedbackCollector({
+      householdId: this.session.householdId,
+    });
+
+    return collector.getFeedback(this.session.sessionId);
+  }
+
+  /**
+   * Process pending feedback and apply learning actions.
+   * Processes all unprocessed feedback for the household.
+   *
+   * @param autoApply - Whether to automatically apply learning actions
+   * @returns Processing result
+   */
+  async processPendingFeedback(autoApply: boolean = true): Promise<FeedbackProcessingResult> {
+    if (!this.session) {
+      return {
+        success: false,
+        processedCount: 0,
+        actionsGenerated: 0,
+        actionsApplied: 0,
+        errors: ['No active session'],
+      };
+    }
+
+    const processor = createFeedbackProcessor({
+      householdId: this.session.householdId,
+      autoApply,
+    });
+
+    const result = await processor.processPendingFeedback();
+
+    // Update feedback status in session
+    if (result.success && result.processedCount > 0) {
+      this.updateFeedbackStatus('processed');
+    }
+
+    return result;
+  }
+
+  /**
+   * Start feedback collection for the current session.
+   * Updates the session feedback status to 'collecting'.
+   */
+  startFeedbackCollection(): void {
+    if (this.session && this.isReadyForFeedback()) {
+      this.updateFeedbackStatus('collecting');
+    }
+  }
+
+  /**
+   * Complete feedback collection for the current session.
+   * Marks the session as ready for feedback processing.
+   */
+  async completeFeedbackCollection(): Promise<void> {
+    if (!this.session) {
+      return;
+    }
+
+    const collector = createFeedbackCollector({
+      householdId: this.session.householdId,
+    });
+
+    await collector.completeFeedbackCollection(this.session.sessionId);
+    this.updateFeedbackStatus('collected');
+    this.updateFeedbackSummary();
+  }
+
+  /**
+   * Skip feedback collection for the current session.
+   */
+  skipFeedbackCollection(): void {
+    if (this.session) {
+      this.updateFeedbackStatus('skipped');
+    }
+  }
+
+  /**
+   * Check if the session is ready for feedback collection.
+   */
+  isReadyForFeedback(): boolean {
+    return this.session?.status === 'review_ready' || this.session?.status === 'completed';
+  }
+
+  /**
+   * Get available items for feedback from the review pack.
+   * Returns items that can receive feedback with their decision types.
+   */
+  getAvailableFeedbackItems(): Array<{
+    productName: string;
+    decisionType: string;
+    productId?: string;
+  }> {
+    const collector = this.createFeedbackCollector();
+    if (!collector) {
+      return [];
+    }
+    return collector.getAvailableFeedbackItems();
+  }
+
+  // ===========================================================================
+  // Private Methods - Feedback Helpers
+  // ===========================================================================
+
+  /**
+   * Update the feedback status in the session.
+   */
+  private updateFeedbackStatus(status: FeedbackStatus): void {
+    if (this.session?.feedback) {
+      this.session.feedback.status = status;
+      this.session.feedback.lastUpdated = new Date();
+    }
+  }
+
+  /**
+   * Update the feedback summary in the session.
+   */
+  private async updateFeedbackSummary(): Promise<void> {
+    if (!this.session) {
+      return;
+    }
+
+    const sessionFeedback = await this.getFeedback();
+    if (!sessionFeedback || !this.session.feedback) {
+      return;
+    }
+
+    const summary = sessionFeedback.summary;
+    if (summary) {
+      this.session.feedback.itemsReviewed = summary.totalItemsReviewed;
+      this.session.feedback.positiveCount = summary.goodFeedbackCount;
+      this.session.feedback.negativeCount =
+        summary.removeNextTimeCount +
+        summary.wrongSubstitutionCount +
+        summary.ranOutEarlyCount;
+    }
+
+    this.session.feedback.overallRating = sessionFeedback.overallRating;
+    this.session.feedback.cartApproved = sessionFeedback.cartApproved;
+    this.session.feedback.lastUpdated = new Date();
   }
 }
 

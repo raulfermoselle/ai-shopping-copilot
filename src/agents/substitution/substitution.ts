@@ -5,6 +5,7 @@
  * - Checking item availability in cart
  * - Finding suitable replacements for unavailable items
  * - Ranking substitutes by similarity (brand, size, price, category)
+ * - Learning from user decisions to improve future recommendations
  * - Presenting options in review pack
  *
  * CRITICAL: This agent NEVER places orders or modifies the cart.
@@ -32,6 +33,20 @@ import {
   searchProductsTool,
 } from './tools/index.js';
 // extractProductInfoTool reserved for Phase 2+ detailed product info extraction
+
+// Import learning module
+import type {
+  SubstitutionLearningStore,
+  LearningConfig,
+  RankingAdjustmentResult,
+} from './learning/index.js';
+import {
+  createEmptyLearningStore,
+  createDefaultLearningConfig,
+  adjustScore,
+  type OriginalProduct,
+  type SubstituteCandidate as LearningSubstituteCandidate,
+} from './learning/index.js';
 
 // =============================================================================
 // Substitution Result Types
@@ -93,7 +108,8 @@ interface InputItem {
  * 1. Checking availability of cart items
  * 2. Finding substitutes for unavailable items
  * 3. Ranking substitutes by similarity
- * 4. Returning results for Coordinator
+ * 4. Applying learned user preferences to bias rankings
+ * 5. Returning results for Coordinator
  *
  * SAFETY: This agent is READ-ONLY. It never modifies cart or places orders.
  */
@@ -102,9 +118,69 @@ export class Substitution {
   private readonly screenshotDir: string;
   private screenshots: string[] = [];
 
-  constructor(config: Partial<SubstitutionWorkerConfig> = {}) {
+  /** Learning store for user preference tracking */
+  private learningStore: SubstitutionLearningStore;
+  /** Configuration for the learning system */
+  private learningConfig: LearningConfig;
+  /** Whether learning is enabled */
+  private learningEnabled: boolean;
+
+  constructor(
+    config: Partial<SubstitutionWorkerConfig> = {},
+    options?: {
+      learningStore?: SubstitutionLearningStore;
+      learningConfig?: Partial<LearningConfig>;
+      enableLearning?: boolean;
+      householdId?: string;
+    }
+  ) {
     this.config = SubstitutionWorkerConfigSchema.parse(config);
     this.screenshotDir = 'screenshots';
+
+    // Initialize learning system
+    const householdId = options?.householdId ?? 'default';
+    this.learningStore = options?.learningStore ?? createEmptyLearningStore(householdId);
+    this.learningConfig = {
+      ...createDefaultLearningConfig(),
+      ...options?.learningConfig,
+    };
+    this.learningEnabled = options?.enableLearning ?? true;
+  }
+
+  /**
+   * Get the current learning store.
+   * Use this to persist the store between sessions.
+   */
+  getLearningStore(): SubstitutionLearningStore {
+    return this.learningStore;
+  }
+
+  /**
+   * Set the learning store (e.g., after loading from persistence).
+   */
+  setLearningStore(store: SubstitutionLearningStore): void {
+    this.learningStore = store;
+  }
+
+  /**
+   * Get the learning configuration.
+   */
+  getLearningConfig(): LearningConfig {
+    return this.learningConfig;
+  }
+
+  /**
+   * Enable or disable learning-based ranking adjustments.
+   */
+  setLearningEnabled(enabled: boolean): void {
+    this.learningEnabled = enabled;
+  }
+
+  /**
+   * Check if learning is enabled.
+   */
+  isLearningEnabled(): boolean {
+    return this.learningEnabled;
   }
 
   /**
@@ -467,6 +543,7 @@ export class Substitution {
 
   /**
    * Rank substitute candidates by similarity to original.
+   * If learning is enabled, applies adjustments based on user history.
    */
   private rankSubstitutes(
     candidates: SubstituteCandidate[],
@@ -477,6 +554,19 @@ export class Substitution {
     const originalPrice = originalInput?.unitPrice ?? 0;
     const originalBrand = originalInput?.brand?.toLowerCase();
     const originalSize = originalInput?.size?.toLowerCase();
+
+    // Build original product info for learning
+    // Use spread to conditionally include optional properties (exactOptionalPropertyTypes compliance)
+    const originalProduct: OriginalProduct | undefined = originalInput
+      ? {
+          productId: originalInput.productId ?? unavailableItem.productId,
+          name: originalInput.name,
+          category: this.detectCategory(originalInput.name),
+          unitPrice: originalInput.unitPrice ?? 0,
+          ...(originalInput.brand !== undefined && { brand: originalInput.brand }),
+          ...(originalInput.size !== undefined && { size: originalInput.size }),
+        }
+      : undefined;
 
     const ranked: RankedSubstitute[] = [];
 
@@ -502,23 +592,57 @@ export class Substitution {
         unavailableItem.productName.toLowerCase()
       );
 
-      // Calculate weighted overall score
-      const overall =
+      // Calculate weighted overall score (base score)
+      let overall =
         brandSimilarity * config.brandWeight +
         sizeSimilarity * config.sizeWeight +
         priceSimilarity * config.priceWeight +
         categoryMatch * config.categoryWeight;
+
+      // Apply learning adjustments if enabled
+      let learningAdjustment: RankingAdjustmentResult | undefined;
+      if (this.learningEnabled && originalProduct) {
+        // Build candidate object with conditional optional properties (exactOptionalPropertyTypes compliance)
+        const learningCandidate: LearningSubstituteCandidate = {
+          productId: candidate.productId,
+          name: candidate.name,
+          unitPrice: candidate.unitPrice,
+          baseScore: overall,
+          ...(candidate.brand !== undefined && { brand: candidate.brand }),
+          ...(candidate.size !== undefined && { size: candidate.size }),
+        };
+
+        learningAdjustment = adjustScore(
+          learningCandidate,
+          originalProduct,
+          this.learningStore,
+          this.learningConfig
+        );
+
+        // Use the adjusted score
+        overall = learningAdjustment.adjustedScore;
+      }
 
       const score: SubstituteScore = {
         brandSimilarity,
         sizeSimilarity,
         priceSimilarity,
         categoryMatch,
+        // Include learning-based userPreference if we have adjustment
+        userPreference: learningAdjustment
+          ? 0.5 + learningAdjustment.totalAdjustment * 2 // Map -0.25..+0.25 to 0..1
+          : undefined,
         overall,
       };
 
-      // Generate reason for this substitute
-      const reason = this.generateSubstituteReason(candidate, score, originalInput);
+      // Generate reason for this substitute (include learning insights)
+      let reason = this.generateSubstituteReason(candidate, score, originalInput);
+      if (learningAdjustment && learningAdjustment.reasoning.length > 0 && learningAdjustment.confidence > 0.3) {
+        const learningReason = learningAdjustment.reasoning[0];
+        if (learningReason && !learningReason.includes('No learning signals')) {
+          reason = `${reason}. ${learningReason}`;
+        }
+      }
 
       // Calculate price delta
       const priceDelta = candidate.unitPrice - originalPrice;
@@ -535,6 +659,41 @@ export class Substitution {
     ranked.sort((a, b) => b.score.overall - a.score.overall);
 
     return ranked;
+  }
+
+  /**
+   * Simple category detection from product name for learning context.
+   * This is a lightweight version - full categorization would use more sophisticated methods.
+   */
+  private detectCategory(productName: string): string {
+    const name = productName.toLowerCase();
+
+    // Common Portuguese grocery categories
+    const categoryPatterns: Array<[string, string[]]> = [
+      ['dairy', ['leite', 'queijo', 'iogurte', 'manteiga', 'nata']],
+      ['meat', ['carne', 'frango', 'porco', 'vaca', 'peru', 'fiambre']],
+      ['fish', ['peixe', 'bacalhau', 'salmao', 'atum', 'camarao']],
+      ['produce', ['fruta', 'legume', 'vegetais', 'alface', 'tomate', 'batata']],
+      ['bakery', ['pao', 'bolacha', 'biscoito', 'bolo', 'croissant']],
+      ['beverages', ['agua', 'sumo', 'cerveja', 'vinho', 'refrigerante', 'coca']],
+      ['cleaning', ['detergente', 'lixivia', 'limpa', 'desinfetante']],
+      ['hygiene', ['champô', 'shampoo', 'sabonete', 'pasta', 'dental', 'papel']],
+      ['pantry', ['arroz', 'massa', 'azeite', 'oleo', 'conserva', 'molho']],
+      ['snacks', ['batatas', 'chips', 'chocolate', 'doce', 'gomas']],
+      ['frozen', ['congelado', 'gelado', 'frozen']],
+      ['baby', ['bebé', 'bebe', 'fralda', 'papa']],
+      ['pet', ['cão', 'gato', 'animal', 'ração']],
+    ];
+
+    for (const [category, keywords] of categoryPatterns) {
+      for (const keyword of keywords) {
+        if (name.includes(keyword)) {
+          return category;
+        }
+      }
+    }
+
+    return 'other';
   }
 
   /**
@@ -751,9 +910,33 @@ export class Substitution {
 
 /**
  * Create a Substitution instance with configuration.
+ *
+ * @param config - Worker configuration (scoring weights, timeouts, etc.)
+ * @param options - Learning options (store, config, enable/disable)
+ * @returns Configured Substitution instance
+ *
+ * @example
+ * // Basic usage
+ * const sub = createSubstitution();
+ *
+ * // With learning enabled and existing store
+ * const sub = createSubstitution({}, {
+ *   learningStore: loadedStore,
+ *   householdId: 'family-123',
+ *   enableLearning: true,
+ * });
+ *
+ * // Disable learning
+ * const sub = createSubstitution({}, { enableLearning: false });
  */
 export function createSubstitution(
-  config?: Partial<SubstitutionWorkerConfig>
+  config?: Partial<SubstitutionWorkerConfig>,
+  options?: {
+    learningStore?: SubstitutionLearningStore;
+    learningConfig?: Partial<LearningConfig>;
+    enableLearning?: boolean;
+    householdId?: string;
+  }
 ): Substitution {
-  return new Substitution(config);
+  return new Substitution(config, options);
 }

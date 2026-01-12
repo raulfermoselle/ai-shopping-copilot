@@ -231,13 +231,29 @@ describe('scanCartTool', () => {
         }),
       ];
 
+      // Create cart container mock that returns items when queried
+      const cartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockImplementation((sel: string) => {
+          if (sel.includes('auc-cart__product')) {
+            return {
+              all: vi.fn().mockResolvedValue(cartItems),
+            };
+          }
+          return createMockLocator();
+        }),
+      };
+
       mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('cart') && selector.includes('item')) {
+        // Cart container selectors
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
           return {
-            all: vi.fn().mockResolvedValue(cartItems),
+            first: vi.fn().mockReturnValue(cartContainerMock),
           };
         }
-        if (selector.includes('total')) {
+        // Cart total selectors
+        if (selector.includes('total') || selector.includes('Total')) {
           return {
             first: vi.fn().mockReturnValue({
               textContent: vi.fn().mockResolvedValue('5,28 €'),
@@ -281,10 +297,25 @@ describe('scanCartTool', () => {
         }),
       ];
 
+      // Create cart container mock that returns items when queried
+      const cartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockImplementation((sel: string) => {
+          if (sel.includes('auc-cart__product')) {
+            return {
+              all: vi.fn().mockResolvedValue(cartItems),
+            };
+          }
+          return createMockLocator();
+        }),
+      };
+
       mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('cart') && selector.includes('item')) {
+        // Cart container selectors
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
           return {
-            all: vi.fn().mockResolvedValue(cartItems),
+            first: vi.fn().mockReturnValue(cartContainerMock),
           };
         }
         if (selector.includes('total')) {
@@ -391,10 +422,24 @@ describe('scanCartTool', () => {
         availabilityNote: 'Produto indisponivel',
       });
 
+      // Create cart container mock
+      const cartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockImplementation((sel: string) => {
+          if (sel.includes('auc-cart__product')) {
+            return {
+              all: vi.fn().mockResolvedValue([unavailableItem]),
+            };
+          }
+          return createMockLocator();
+        }),
+      };
+
       mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('cart') && selector.includes('item')) {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
           return {
-            all: vi.fn().mockResolvedValue([unavailableItem]),
+            first: vi.fn().mockReturnValue(cartContainerMock),
           };
         }
         if (selector.includes('total')) {
@@ -424,9 +469,22 @@ describe('scanCartTool', () => {
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
       (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
-      mockPage.locator.mockReturnValue({
-        all: vi.fn().mockResolvedValue([]),
-        first: vi.fn().mockReturnValue(createMockLocator()),
+      // Create empty cart container mock
+      const emptyCartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockPage.locator.mockImplementation((selector: string) => {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
+          return {
+            first: vi.fn().mockReturnValue(emptyCartContainerMock),
+          };
+        }
+        return createMockLocator();
       });
 
       // Act
@@ -452,10 +510,24 @@ describe('scanCartTool', () => {
         unitPrice: '1,39 €',
       });
 
+      // Create cart container mock
+      const cartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockImplementation((sel: string) => {
+          if (sel.includes('auc-cart__product')) {
+            return {
+              all: vi.fn().mockResolvedValue([itemWithPortugueseCurrency]),
+            };
+          }
+          return createMockLocator();
+        }),
+      };
+
       mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('cart') && selector.includes('item')) {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
           return {
-            all: vi.fn().mockResolvedValue([itemWithPortugueseCurrency]),
+            first: vi.fn().mockReturnValue(cartContainerMock),
           };
         }
         if (selector.includes('total')) {
@@ -484,11 +556,26 @@ describe('scanCartTool', () => {
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
       (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
-      mockPage.locator.mockReturnValue({
-        all: vi.fn().mockResolvedValue([]),
-        first: vi.fn().mockReturnValue({
-          textContent: vi.fn().mockResolvedValue('1234,56 €'),
+      // Create empty cart container mock
+      const emptyCartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([]),
         }),
+      };
+
+      mockPage.locator.mockImplementation((selector: string) => {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
+          return {
+            first: vi.fn().mockReturnValue(emptyCartContainerMock),
+          };
+        }
+        return {
+          first: vi.fn().mockReturnValue({
+            textContent: vi.fn().mockResolvedValue('1234,56 €'),
+          }),
+        };
       });
 
       // Act
@@ -571,15 +658,24 @@ describe('scanCartTool', () => {
         click: vi.fn().mockResolvedValue(undefined),
       };
 
+      // Create empty cart container mock
+      const emptyCartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([]),
+        }),
+      };
+
       mockPage.locator.mockImplementation((selector: string) => {
         if (selector.includes('Ver todos') || selector.includes('Mostrar')) {
           return {
             all: vi.fn().mockResolvedValue([mockExpandButton]),
           };
         }
-        if (selector.includes('cart') && selector.includes('item')) {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
           return {
-            all: vi.fn().mockResolvedValue([]),
+            first: vi.fn().mockReturnValue(emptyCartContainerMock),
           };
         }
         if (selector.includes('total')) {
@@ -610,9 +706,22 @@ describe('scanCartTool', () => {
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
       (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
-      mockPage.locator.mockReturnValue({
-        all: vi.fn().mockResolvedValue([]),
-        first: vi.fn().mockReturnValue(createMockLocator()),
+      // Create empty cart container mock
+      const emptyCartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockPage.locator.mockImplementation((selector: string) => {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
+          return {
+            first: vi.fn().mockReturnValue(emptyCartContainerMock),
+          };
+        }
+        return createMockLocator();
       });
 
       // Act
@@ -634,9 +743,22 @@ describe('scanCartTool', () => {
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
       (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
-      mockPage.locator.mockReturnValue({
-        all: vi.fn().mockResolvedValue([]),
-        first: vi.fn().mockReturnValue(createMockLocator()),
+      // Create empty cart container mock
+      const emptyCartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockReturnValue({
+          all: vi.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockPage.locator.mockImplementation((selector: string) => {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
+          return {
+            first: vi.fn().mockReturnValue(emptyCartContainerMock),
+          };
+        }
+        return createMockLocator();
       });
 
       // Act
@@ -761,10 +883,24 @@ describe('scanCartTool', () => {
         unitPrice: '5,00 €',
       });
 
+      // Create cart container mock with mixed items
+      const cartContainerMock = {
+        count: vi.fn().mockResolvedValue(1),
+        locator: vi.fn().mockImplementation((sel: string) => {
+          if (sel.includes('auc-cart__product')) {
+            return {
+              all: vi.fn().mockResolvedValue([failingItem, workingItem]),
+            };
+          }
+          return createMockLocator();
+        }),
+      };
+
       mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('cart') && selector.includes('item')) {
+        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+            selector.includes('cart-items')) {
           return {
-            all: vi.fn().mockResolvedValue([failingItem, workingItem]),
+            first: vi.fn().mockReturnValue(cartContainerMock),
           };
         }
         if (selector.includes('total')) {

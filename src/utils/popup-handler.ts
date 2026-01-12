@@ -13,22 +13,64 @@ import type { Page } from 'playwright';
 
 /**
  * Known popup dismiss strategies
+ *
+ * CRITICAL: Reorder modals (with "Juntar"/"Eliminar" buttons) should NOT be dismissed.
+ * Only dismiss actual blocking popups like subscription prompts, cookie banners, etc.
  */
 const POPUP_DISMISS_STRATEGIES = [
-  // Subscription popup - "Não" button
+  // Cart removal confirmation popup - "Cancelar" button (CRITICAL: Click to KEEP items)
+  // This modal asks "Tem a certeza de que pretende remover todos os produtos do carrinho?"
+  // We MUST click Cancelar to keep the cart items
+  {
+    name: 'cart-removal-cancel',
+    selector: 'button:has-text("Cancelar")',
+    description: 'Cart removal confirmation - click "Cancelar" to keep items',
+    priority: 10, // Highest priority - handle first
+    // Only match if this is the cart removal modal (not the reorder modal which has Juntar)
+    validateContext: async (page: Page) => {
+      // Check for cart removal modal text
+      const hasRemovalText = await page.locator('text="Remover produtos do carrinho"').count() > 0;
+      const hasRemovalQuestion = await page.locator('text="remover todos os produtos"').count() > 0;
+      // Ensure this is NOT the reorder modal (which has Juntar button)
+      const hasJuntarButton = await page.locator('button:has-text("Juntar")').count() > 0;
+      return (hasRemovalText || hasRemovalQuestion) && !hasJuntarButton;
+    },
+  },
+  // Subscription popup - "Não" link/text (NOT a button element)
   {
     name: 'subscription-popup-nao',
-    selector: 'button:has-text("Não")',
-    description: 'Subscription popup - click "Não" button',
+    selector: 'a:has-text("Não"), button:has-text("Não"), [role="button"]:has-text("Não")',
+    description: 'Subscription popup - click "Não" link',
+    priority: 9, // High priority - before generic close
   },
   // Subscription popup - close X button
+  // IMPORTANT: Only close modals that are NOT the reorder modal
+  // The reorder modal has "Encomendar de novo" title and "Juntar"/"Eliminar" buttons
   {
     name: 'subscription-popup-close',
-    selector: '.modal button[aria-label="Close"], .modal .close, [role="dialog"] button:has-text("×")',
+    selector: '[role="dialog"] button.close, .modal button[aria-label="Close"], .modal .close, button:has-text("×")',
     description: 'Modal close button',
+    priority: 8,
+    // Don't close if this is the reorder modal (has Juntar button)
+    validateContext: async (page: Page) => {
+      const isReorderModal = await page.locator('button:has-text("Juntar")').count() > 0;
+      return !isReorderModal; // Only dismiss if NOT reorder modal
+    },
   },
-  // Generic modal backdrop click (risky - might dismiss wanted modals)
-  // Not included by default
+  // Generic notification/promotional popups
+  // IMPORTANT: Don't dismiss the reorder modal
+  {
+    name: 'generic-dismiss',
+    selector: '.notification-close, .popup-dismiss, [data-dismiss="modal"]',
+    description: 'Generic dismiss button',
+    priority: 1,
+    // Don't dismiss if this is the reorder modal (has Juntar or Eliminar button)
+    validateContext: async (page: Page) => {
+      const isReorderModal = await page.locator('button:has-text("Juntar")').count() > 0;
+      const hasEliminar = await page.locator('button:has-text("Eliminar")').count() > 0;
+      return !isReorderModal && !hasEliminar; // Only dismiss if NOT reorder modal
+    },
+  },
 ];
 
 /**
@@ -60,28 +102,64 @@ export async function dismissPopups(
   const { timeout = 2000, verbose = false, logger } = options;
   let dismissed = 0;
 
-  for (const strategy of POPUP_DISMISS_STRATEGIES) {
+  // Sort strategies by priority (highest first)
+  const sortedStrategies = [...POPUP_DISMISS_STRATEGIES].sort((a, b) => {
+    const priorityA = 'priority' in a ? (a.priority as number) : 0;
+    const priorityB = 'priority' in b ? (b.priority as number) : 0;
+    return priorityB - priorityA;
+  });
+
+  for (const strategy of sortedStrategies) {
     try {
-      const element = page.locator(strategy.selector).first();
-      const isVisible = await element.isVisible({ timeout }).catch(() => false);
-
-      if (isVisible) {
-        if (verbose && logger) {
-          logger.info(`Dismissing popup: ${strategy.description}`);
-        }
-
-        await element.click({ timeout: 1000 });
-        dismissed++;
-
-        // Wait a moment for the popup to close
-        await page.waitForTimeout(500);
-
-        if (verbose && logger) {
-          logger.debug(`Popup dismissed: ${strategy.name}`);
+      // If strategy has context validation, check if we should use it
+      if ('validateContext' in strategy && typeof strategy.validateContext === 'function') {
+        const shouldDismiss = await (strategy.validateContext as (page: Page) => Promise<boolean>)(page);
+        if (!shouldDismiss) {
+          if (verbose && logger) {
+            logger.debug(`Skipping popup strategy ${strategy.name} - context validation failed`);
+          }
+          continue;
         }
       }
-    } catch {
+
+      // Check ALL matching elements (not just first) in case multiple popups have same buttons
+      const elements = await page.locator(strategy.selector).all();
+
+      for (const element of elements) {
+        const isVisible = await element.isVisible({ timeout }).catch(() => false);
+
+        if (isVisible) {
+          if (verbose && logger) {
+            logger.info(`Dismissing popup: ${strategy.description}`, { strategy: strategy.name });
+          }
+
+          // Try to click, but don't fail if element becomes stale
+          try {
+            await element.click({ timeout: 1000 });
+            dismissed++;
+
+            // Wait a moment for the popup to close
+            await page.waitForTimeout(500);
+
+            if (verbose && logger) {
+              logger.debug(`Popup dismissed: ${strategy.name}`);
+            }
+          } catch (clickErr) {
+            if (verbose && logger) {
+              logger.debug(`Click failed for ${strategy.name}`, {
+                error: clickErr instanceof Error ? clickErr.message : String(clickErr),
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
       // Strategy didn't work, try next
+      if (verbose && logger) {
+        logger.debug(`Popup strategy failed: ${strategy.name}`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 

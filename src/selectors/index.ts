@@ -7,3 +7,5 @@
 export * from './types.js';
 export * from './registry.js';
 export * from './resolver.js';
+export * from './resilient-resolver.js';
+export * from './fallback-strategies.js';

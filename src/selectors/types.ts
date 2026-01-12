@@ -264,3 +264,86 @@ export interface SelectorValidationResult {
   /** Error if invalid */
   error?: string;
 }
+
+/**
+ * Confidence level for selector resolution
+ */
+export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'very-low';
+
+/**
+ * Result from resilient selector resolution with retry logic
+ */
+export interface ResolutionResult<T = any> {
+  /** Whether resolution succeeded */
+  success: boolean;
+
+  /** The resolved element (if successful) */
+  element?: T;
+
+  /** The selector that matched */
+  matchedSelector?: string;
+
+  /** Confidence level of the match */
+  confidence: ConfidenceLevel;
+
+  /** Which resolution strategy worked */
+  strategy: 'primary' | 'fallback' | 'text-heuristic' | 'structural-heuristic';
+
+  /** Fallback index used (if fallback strategy) */
+  fallbackIndex?: number;
+
+  /** Number of attempts made */
+  attempts: number;
+
+  /** Time taken in milliseconds */
+  duration: number;
+
+  /** Warnings or notes about the resolution */
+  warnings: string[];
+
+  /** Error message if resolution failed */
+  error?: string;
+
+  /** Screenshot path if captured during resolution */
+  screenshot?: string;
+
+  /** Additional diagnostic data */
+  diagnostic?: {
+    triedSelectors: string[];
+    domSnapshot?: string;
+    pageUrl?: string;
+    timestamp: string;
+  };
+}
+
+/**
+ * Options for resilient selector resolution
+ */
+export interface ResilientResolveOptions {
+  /** Total timeout in milliseconds */
+  timeout?: number;
+
+  /** Required element state */
+  state?: 'visible' | 'attached' | 'hidden';
+
+  /** Maximum retry attempts */
+  maxAttempts?: number;
+
+  /** Whether to capture screenshot on failure */
+  captureScreenshot?: boolean;
+
+  /** Whether to capture DOM snapshot on failure */
+  captureDomSnapshot?: boolean;
+
+  /** Whether to try text-based heuristics as last resort */
+  enableTextHeuristics?: boolean;
+
+  /** Whether to try structural heuristics */
+  enableStructuralHeuristics?: boolean;
+
+  /** Custom text hints for text-based fallback */
+  textHints?: string[];
+
+  /** Allow degraded confidence results */
+  allowDegraded?: boolean;
+}

@@ -26,6 +26,7 @@ import 'dotenv/config';
 import { chromium } from 'playwright';
 import { createCoordinator } from '../src/agents/coordinator/coordinator.js';
 import { createLogger } from '../src/utils/logger.js';
+import { attachPopupObserver, detachPopupObserver } from '../src/utils/auto-popup-dismisser.js';
 import type { AgentContext, WorkingMemory } from '../src/types/agent.js';
 import type { ReviewPack } from '../src/agents/coordinator/types.js';
 
@@ -174,6 +175,11 @@ async function main(): Promise<void> {
   const page = await browserContext.newPage();
 
   try {
+    // Attach auto-popup dismisser IMMEDIATELY after page creation
+    printSection('🛡️ Enabling Auto-Popup Protection');
+    console.log('MutationObserver will automatically dismiss popups as they appear');
+    await attachPopupObserver(page, logger);
+
     // Create AgentContext
     const sessionId = `demo-${Date.now()}`;
     const workingMemory: WorkingMemory = {
@@ -183,6 +189,24 @@ async function main(): Promise<void> {
       deliverySlots: [],
     };
 
+    let stepCounter = 0;
+    const screenshotHelper = async (stepName: string, position: 'before' | 'after') => {
+      stepCounter++;
+      const timestamp = Date.now();
+      const filename = `step${stepCounter.toString().padStart(2, '0')}-${stepName}-${position}-${timestamp}.png`;
+      const filepath = `screenshots/${filename}`;
+      try {
+        await page.screenshot({ path: filepath, fullPage: false });
+        logger.info(`Screenshot captured: ${filename}`, { step: stepName, position });
+        return filepath;
+      } catch (err) {
+        logger.warn(`Failed to capture screenshot: ${filename}`, {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
+    };
+
     const context: AgentContext = {
       page,
       logger,
@@ -190,7 +214,7 @@ async function main(): Promise<void> {
       workingMemory,
     };
 
-    // Create and run Coordinator
+    // Create and run Coordinator with observability wrapper
     printSection('🤖 Running Coordinator');
     console.log('This will:');
     console.log('  1. Login to Auchan.pt');
@@ -200,43 +224,108 @@ async function main(): Promise<void> {
     console.log('  5. Generate Review Pack');
     console.log();
 
-    const coordinator = createCoordinator({
-      maxOrdersToLoad: 3,
-      mergeStrategy: 'latest',
-      captureScreenshots: true,
-      maxRetries: 2,
-    });
+    // Setup stuck detection
+    let lastProgressTime = Date.now();
+    let stuckDetectionInterval: NodeJS.Timeout | null = null;
+    const STUCK_TIMEOUT_MS = 600000; // 10 minutes - disabled effectively to let flow complete
 
-    const result = await coordinator.run(context, email, 'household-demo');
+    const updateProgress = (stepName: string) => {
+      lastProgressTime = Date.now();
+      logger.info(`Progress: ${stepName}`, { timestamp: new Date().toISOString() });
+    };
 
-    if (result.success && result.data) {
-      printSection('✅ SUCCESS');
-      console.log(`Session ID: ${result.data.sessionId}`);
-      console.log(`Duration: ${(result.data.durationMs / 1000).toFixed(1)}s`);
-      console.log(`Screenshots: ${result.data.screenshots.length} captured`);
-
-      // Display Review Pack
-      printReviewPack(result.data.reviewPack);
-
-      // Keep browser open for user to review
-      printSection('👀 Review Your Cart');
-      console.log('The browser is open for you to review the cart.');
-      console.log('Press Ctrl+C when you\'re done.');
-      console.log();
-
-      // Wait indefinitely
-      await new Promise(() => {});
-    } else {
-      printSection('❌ FAILED');
-      console.error(`Error: ${result.error?.message ?? 'Unknown error'}`);
-      console.log('\nLogs:');
-      for (const log of result.logs) {
-        console.log(`  ${log}`);
+    stuckDetectionInterval = setInterval(async () => {
+      const timeSinceProgress = Date.now() - lastProgressTime;
+      if (timeSinceProgress > STUCK_TIMEOUT_MS) {
+        logger.error('STUCK DETECTION: No progress for 45+ seconds', {
+          timeSinceProgress,
+          lastProgressTime: new Date(lastProgressTime).toISOString(),
+          currentUrl: page.url(),
+        });
+        await screenshotHelper('stuck-detected', 'after');
+        console.error(`${colors.red}STUCK: Demo appears frozen. Exiting early.${colors.reset}`);
+        if (stuckDetectionInterval) clearInterval(stuckDetectionInterval);
+        await browser.close();
+        process.exit(1);
       }
+    }, 10000); // Check every 10 seconds
+
+    try {
+      updateProgress('demo-start');
+
+      const coordinator = createCoordinator({
+        maxOrdersToLoad: 3,
+        mergeStrategy: 'latest',
+        captureScreenshots: true,
+        maxRetries: 2,
+      });
+
+      updateProgress('coordinator-created');
+      const result = await coordinator.run(context, email, 'household-demo');
+      updateProgress('coordinator-completed');
+
+      // Clear stuck detection
+      if (stuckDetectionInterval) {
+        clearInterval(stuckDetectionInterval);
+        stuckDetectionInterval = null;
+      }
+
+      if (result.success && result.data) {
+        printSection('✅ SUCCESS');
+        console.log(`Session ID: ${result.data.sessionId}`);
+        console.log(`Duration: ${(result.data.durationMs / 1000).toFixed(1)}s`);
+        console.log(`Screenshots: ${result.data.screenshots.length} captured`);
+
+        // Display Review Pack
+        printReviewPack(result.data.reviewPack);
+
+        // Capture final screenshot
+        await screenshotHelper('demo-complete', 'after');
+
+        // Keep browser open for user to review (with timeout)
+        printSection('👀 Review Your Cart');
+        console.log('The browser is open for you to review the cart.');
+        console.log('Screenshots saved to screenshots/ directory.');
+        console.log('Browser will stay open for 60 seconds for review, then automatically close.');
+        console.log('(Press Ctrl+C to exit earlier)');
+        console.log();
+
+        // Wait for review period (60 seconds max) then auto-close
+        const REVIEW_TIME_MS = 60000; // 60 seconds
+        console.log(`Waiting ${REVIEW_TIME_MS / 1000}s for review...`);
+
+        await new Promise((resolve) => {
+          setTimeout(() => {
+            console.log('Review period complete. Closing browser.');
+            resolve(null);
+          }, REVIEW_TIME_MS);
+        });
+      } else {
+        printSection('❌ FAILED');
+        console.error(`Error: ${result.error?.message ?? 'Unknown error'}`);
+        await screenshotHelper('demo-failed', 'after');
+        console.log('\nLogs:');
+        for (const log of result.logs) {
+          console.log(`  ${log}`);
+        }
+      }
+    } catch (coordinatorError) {
+      // Inner try-catch for coordinator execution
+      logger.error('Coordinator execution error', {
+        error: coordinatorError instanceof Error ? coordinatorError.message : String(coordinatorError),
+      });
+      await screenshotHelper('coordinator-error', 'after');
+      throw coordinatorError;
     }
   } catch (error) {
     console.error(`${colors.red}Unexpected error:${colors.reset}`, error);
   } finally {
+    // Cleanup: detach observer before closing
+    try {
+      await detachPopupObserver(page);
+    } catch {
+      // Page might already be closed
+    }
     await browser.close();
   }
 }

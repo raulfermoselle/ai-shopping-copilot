@@ -11,6 +11,7 @@
 import type { ToolContext } from '../types/tool.js';
 import { BaseTool } from './base-tool.js';
 import { loadCredentials, hasCredentials, getConfig } from '../config/index.js';
+import { attachPopupObserver } from '../utils/auto-popup-dismisser.js';
 
 /**
  * Auchan.pt login page selectors
@@ -81,6 +82,9 @@ export class LoginTool extends BaseTool<LoginInput, LoginResult> {
     const credentials = this.getCredentials(input);
 
     context.logger.info('Starting login flow', { baseUrl });
+
+    // Attach auto-popup dismisser for the session
+    await attachPopupObserver(context.page, context.logger);
 
     // Navigate to homepage first
     await this.navigate(context, baseUrl);

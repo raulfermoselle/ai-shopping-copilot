@@ -9,6 +9,11 @@
  * - Poll session status
  * - Transform Coordinator ReviewPack to Control Panel format
  * - Handle user modifications and approval
+ *
+ * Phase 3 Enhancements:
+ * - Real-time progress tracking with ProgressTracker
+ * - Decision explanations and confidence scores
+ * - Preference tracking and display
  */
 
 import { randomUUID } from 'crypto';
@@ -25,12 +30,28 @@ import type {
   UserApproval,
   AddedItem,
   SlotOption,
+  ProgressState,
+  DecisionReasoning,
+  PreferenceDisplay,
+  GetProgressResponse,
+  GetPreferencesResponse,
+  GetExplanationsResponse,
 } from './types.js';
 import type {
   CoordinatorSession,
   CoordinatorConfig,
 } from '../agents/coordinator/types.js';
 import { Coordinator } from '../agents/coordinator/coordinator.js';
+import {
+  ProgressTracker,
+  createProgressTracker,
+  createAddedFromOrderReasoning,
+  createPruningReasoning,
+  createSubstitutionReasoning,
+  preferenceDisplayBuilder,
+  createSamplePreferenceRules,
+  createSampleApplications,
+} from './components/index.js';
 
 // =============================================================================
 // Types
@@ -49,6 +70,16 @@ interface ManagedSession {
   page?: Page;
   startTime: Date;
   endTime?: Date;
+
+  // Phase 3: Enhanced tracking
+  /** Real-time progress tracker */
+  progressTracker: ProgressTracker;
+  /** Progress state for API responses */
+  progressState: ProgressState;
+  /** Decision explanations for all cart items */
+  decisionExplanations: DecisionReasoning[];
+  /** Active preferences affecting this session */
+  preferences: PreferenceDisplay;
 }
 
 /**
@@ -71,6 +102,12 @@ export interface SessionManagerEvents {
   onReviewPackReady?: (sessionId: string, reviewPack: CPReviewPack) => void;
   onError?: (sessionId: string, error: Error) => void;
   onComplete?: (sessionId: string) => void;
+
+  // Phase 3: Enhanced events
+  /** Called when progress state changes (for real-time UI updates) */
+  onProgressStateChange?: (sessionId: string, state: ProgressState) => void;
+  /** Called when new decision explanations are available */
+  onExplanationsReady?: (sessionId: string, explanations: DecisionReasoning[]) => void;
 }
 
 // =============================================================================
@@ -109,6 +146,23 @@ export class SessionManager {
 
     this.logger.info('Starting new session', { sessionId, username: request.username });
 
+    // Create progress tracker with event forwarding
+    const progressTracker = createProgressTracker((state) => {
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.progressState = state;
+        this.events.onProgressStateChange?.(sessionId, state);
+      }
+    });
+
+    // Initialize preferences (in production, load from persistence)
+    const sampleRules = createSamplePreferenceRules();
+    const sampleApplications = createSampleApplications();
+    const preferences = preferenceDisplayBuilder()
+      .addRules(sampleRules)
+      .recordApplications(sampleApplications)
+      .build();
+
     const session: ManagedSession = {
       sessionId,
       request,
@@ -121,6 +175,12 @@ export class SessionManager {
         updatedAt: new Date(),
       },
       startTime: new Date(),
+
+      // Phase 3: Initialize enhanced tracking
+      progressTracker,
+      progressState: progressTracker.getState(),
+      decisionExplanations: [],
+      preferences,
     };
 
     this.sessions.set(sessionId, session);
@@ -223,6 +283,69 @@ export class SessionManager {
     return true;
   }
 
+  // ===========================================================================
+  // Phase 3: New API Methods
+  // ===========================================================================
+
+  /**
+   * Get real-time progress state for a session.
+   * Used by GET /api/session/{id}/progress endpoint.
+   */
+  getSessionProgress(sessionId: string): GetProgressResponse | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    return {
+      sessionId,
+      progress: session.progressState,
+    };
+  }
+
+  /**
+   * Get active preferences for a session.
+   * Used by GET /api/session/{id}/preferences endpoint.
+   */
+  getSessionPreferences(sessionId: string): GetPreferencesResponse | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    return {
+      sessionId,
+      preferences: session.preferences,
+    };
+  }
+
+  /**
+   * Get decision explanations for a session.
+   * Used by GET /api/session/{id}/explanations endpoint.
+   */
+  getSessionExplanations(sessionId: string): GetExplanationsResponse | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    const explanations = session.decisionExplanations;
+    const highConfidence = explanations.filter((e) => e.confidence.level === 'high').length;
+    const mediumConfidence = explanations.filter((e) => e.confidence.level === 'medium').length;
+    const lowConfidence = explanations.filter((e) => e.confidence.level === 'low').length;
+
+    return {
+      sessionId,
+      explanations,
+      summary: {
+        totalDecisions: explanations.length,
+        highConfidence,
+        mediumConfidence,
+        lowConfidence,
+      },
+    };
+  }
+
   /**
    * Clean up old sessions.
    */
@@ -298,41 +421,83 @@ export class SessionManager {
    * In production, this would be replaced with actual Coordinator.run()
    */
   private async simulateCoordinatorExecution(session: ManagedSession): Promise<void> {
-    const { sessionId, request } = session;
+    const { sessionId, request, progressTracker } = session;
+
+    // Phase 3: Use progress tracker for enhanced tracking
+    progressTracker.setPhase('authenticating', 'Logging into Auchan...');
+    await this.delay(1000);
 
     // Simulate loading orders
-    await this.delay(1000);
+    progressTracker.setPhase('loading_orders', `Loading ${request.ordersToLoad} orders...`);
+    progressTracker.startWorker('cart_builder', 'Fetching order history');
+
+    for (let i = 1; i <= request.ordersToLoad; i++) {
+      await this.delay(800);
+      progressTracker.setWorkerProgress(
+        'cart_builder',
+        (i / request.ordersToLoad) * 40,
+        `Loading order ${i} of ${request.ordersToLoad}`,
+        i,
+        request.ordersToLoad
+      );
+    }
+
     this.updateProgress(sessionId, 'loading_orders', 1, `Loading ${request.ordersToLoad} orders...`);
 
     // Simulate cart building
-    await this.delay(1500);
+    progressTracker.setPhase('building_cart', 'Merging orders into cart...');
+    progressTracker.setWorkerProgress('cart_builder', 60, 'Merging items from orders');
+    await this.delay(1000);
+
+    progressTracker.setWorkerProgress('cart_builder', 80, 'Applying preferences');
+    await this.delay(500);
+
+    progressTracker.completeWorker('cart_builder');
     this.updateProgress(sessionId, 'building_cart', 2, 'Merging orders into cart...');
 
     // Simulate availability check (if enabled)
     if (!request.skipSubstitutions) {
+      progressTracker.setPhase('checking_availability', 'Checking item availability...');
+      progressTracker.startWorker('substitution', 'Checking availability');
       await this.delay(1000);
+      progressTracker.setWorkerProgress('substitution', 50, 'Finding alternatives for unavailable items');
       this.updateProgress(sessionId, 'checking_availability', 3, 'Checking item availability...');
+    } else {
+      progressTracker.skipWorker('substitution');
     }
 
     // Simulate substitution search (if enabled)
     if (!request.skipSubstitutions) {
+      progressTracker.setPhase('finding_substitutes', 'Finding substitutes...');
       await this.delay(1000);
+      progressTracker.completeWorker('substitution');
       this.updateProgress(sessionId, 'finding_substitutes', 4, 'Finding substitutes...');
     }
 
     // Simulate pruning (if enabled)
     if (!request.skipPruning) {
+      progressTracker.setPhase('pruning_stock', 'Analyzing restock needs...');
+      progressTracker.startWorker('stock_pruner', 'Analyzing purchase history');
       await this.delay(800);
+      progressTracker.completeWorker('stock_pruner');
       this.updateProgress(sessionId, 'pruning_stock', 5, 'Analyzing restock needs...');
+    } else {
+      progressTracker.skipWorker('stock_pruner');
     }
 
     // Simulate slot scouting (if enabled)
     if (!request.skipSlotScout) {
+      progressTracker.setPhase('scouting_slots', 'Finding delivery slots...');
+      progressTracker.startWorker('slot_scout', 'Checking delivery options');
       await this.delay(800);
+      progressTracker.completeWorker('slot_scout');
       this.updateProgress(sessionId, 'scouting_slots', 6, 'Finding delivery slots...');
+    } else {
+      progressTracker.skipWorker('slot_scout');
     }
 
     // Generate review pack
+    progressTracker.setPhase('generating_review', 'Generating review pack...');
     await this.delay(500);
     this.updateProgress(sessionId, 'generating_review', 7, 'Generating review pack...');
 
@@ -340,7 +505,12 @@ export class SessionManager {
     const reviewPack = this.createMockReviewPack(session);
     session.reviewPack = reviewPack;
 
+    // Phase 3: Generate decision explanations
+    session.decisionExplanations = this.generateMockExplanations(session);
+    this.events.onExplanationsReady?.(sessionId, session.decisionExplanations);
+
     // Final status
+    progressTracker.setPhase('review_ready', 'Review pack ready!');
     session.progress.status = 'awaiting_review';
     session.progress.progress = 100;
     session.progress.currentStep = 'Review pack ready for approval';
@@ -418,6 +588,91 @@ export class SessionManager {
       confidence: 0.92,
       warnings: ['1 item unavailable - substitute suggested'],
     };
+  }
+
+  /**
+   * Generate mock decision explanations for development/testing.
+   */
+  private generateMockExplanations(session: ManagedSession): DecisionReasoning[] {
+    const explanations: DecisionReasoning[] = [];
+    const ordersAnalyzed = ['ORD-001', 'ORD-002', 'ORD-003'];
+
+    // Explanation for added items
+    explanations.push(
+      createAddedFromOrderReasoning(
+        'item-001',
+        'Leite Mimosa Meio Gordo 1L',
+        ordersAnalyzed,
+        3,
+        3,
+        6
+      )
+    );
+
+    explanations.push(
+      createAddedFromOrderReasoning(
+        'item-002',
+        'Pao de Forma Integral',
+        ['ORD-001', 'ORD-002'],
+        3,
+        2,
+        2
+      )
+    );
+
+    explanations.push(
+      createAddedFromOrderReasoning(
+        'item-003',
+        'Iogurte Natural Danone',
+        ordersAnalyzed,
+        3,
+        3,
+        4
+      )
+    );
+
+    // Explanation for substitution
+    explanations.push(
+      createSubstitutionReasoning(
+        'item-004',
+        'Maca Golden',
+        'Maca Fuji',
+        {
+          originalName: 'Maca Golden',
+          substituteName: 'Maca Fuji',
+          priceDifference: 0.30,
+          originalUnitPrice: 2.99,
+          substituteUnitPrice: 3.29,
+          similarityScore: 0.85,
+          differences: [
+            'Slightly sweeter taste',
+            'Similar nutritional value',
+          ],
+          selectionReason: 'Best match in apple category with similar weight',
+        }
+      )
+    );
+
+    // Explanation for potential pruning (if review pack had removals)
+    if (session.reviewPack && session.reviewPack.suggestedRemovals.length > 0) {
+      for (const removal of session.reviewPack.suggestedRemovals) {
+        explanations.push(
+          createPruningReasoning(
+            removal.productId ?? `removal-${removal.name}`,
+            removal.name,
+            {
+              itemName: removal.name,
+              daysSinceLastPurchase: removal.daysSinceLastPurchase ?? 3,
+              typicalCadenceDays: 14,
+              estimatedDaysUntilNeeded: 11,
+              reason: removal.reason,
+            }
+          )
+        );
+      }
+    }
+
+    return explanations;
   }
 
   /**

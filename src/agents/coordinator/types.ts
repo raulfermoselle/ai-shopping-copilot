@@ -220,6 +220,48 @@ export type WorkerResults = z.infer<typeof WorkerResultsSchema>;
 // =============================================================================
 
 /**
+ * Feedback status for the session.
+ * Tracks whether feedback has been collected and processed.
+ */
+export const FeedbackStatusSchema = z.enum([
+  /** Feedback not yet collected */
+  'pending',
+  /** Feedback collection in progress */
+  'collecting',
+  /** Feedback collected, awaiting processing */
+  'collected',
+  /** Feedback processed and applied */
+  'processed',
+  /** Feedback skipped by user */
+  'skipped',
+]);
+
+export type FeedbackStatus = z.infer<typeof FeedbackStatusSchema>;
+
+/**
+ * Feedback summary for the session.
+ * Provides quick access to feedback statistics.
+ */
+export const SessionFeedbackSummarySchema = z.object({
+  /** Feedback collection status */
+  status: FeedbackStatusSchema,
+  /** Overall session rating (1-5) */
+  overallRating: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
+  /** Total number of items with feedback */
+  itemsReviewed: z.number().int().nonnegative().default(0),
+  /** Positive feedback count */
+  positiveCount: z.number().int().nonnegative().default(0),
+  /** Negative feedback count */
+  negativeCount: z.number().int().nonnegative().default(0),
+  /** Whether cart was approved */
+  cartApproved: z.boolean().optional(),
+  /** When feedback was last updated */
+  lastUpdated: z.coerce.date().optional(),
+});
+
+export type SessionFeedbackSummary = z.infer<typeof SessionFeedbackSummarySchema>;
+
+/**
  * Coordinator session state.
  * Tracks the full lifecycle of a shopping session.
  */
@@ -244,6 +286,8 @@ export const CoordinatorSessionSchema = z.object({
   errors: z.array(CoordinatorErrorSchema),
   /** Screenshots captured during session */
   screenshots: z.array(z.string()),
+  /** Feedback status and summary (Phase 3) */
+  feedback: SessionFeedbackSummarySchema.optional(),
 });
 
 export type CoordinatorSession = z.infer<typeof CoordinatorSessionSchema>;
@@ -658,6 +702,12 @@ export function createSession(
     reviewPack: null,
     errors: [],
     screenshots: [],
+    feedback: {
+      status: 'pending',
+      itemsReviewed: 0,
+      positiveCount: 0,
+      negativeCount: 0,
+    },
   };
 }
 

@@ -11,7 +11,7 @@
  * - ReviewPackFormatter: Transforms ReviewPack into display-ready format
  *
  * Phase 1: CLI interface for terminal-based interaction
- * Phase 3: Web interface for browser-based interaction
+ * Phase 3: Enhanced UI with confidence, reasoning, preferences, and progress
  */
 
 // Core types
@@ -31,6 +31,9 @@ export {
   createControlPanelAPI,
   createControlPanelAPIInstance,
 } from './api.js';
+
+// Phase 3: UI Components
+export * from './components/index.js';
 
 // Re-export Coordinator types used by Control Panel
 export type {

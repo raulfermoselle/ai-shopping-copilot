@@ -4,11 +4,17 @@
  * Builds the shopping cart by:
  * - Loading previous orders from Auchan.pt order history
  * - Using "Encomendar de novo" for bulk cart loading
+ * - Applying learned preferences to filter/adjust items (Phase 3)
  * - Computing cart diff for review
  *
  * Key insight from research (Sprint-CB-R-001):
  * The "Encomendar de novo" button adds an entire order to cart instantly,
  * eliminating the need to add items individually.
+ *
+ * Phase 3 Addition (Sprint-CB-I-002):
+ * Preference learning integration - the agent can now use learned preferences
+ * to auto-exclude items with strong rejection signals and suggest quantity
+ * adjustments based on user history.
  */
 
 import type { AgentContext, AgentResult } from '../../types/agent.js';
@@ -33,6 +39,17 @@ import {
   scanCartTool,
 } from './tools/index.js';
 
+// Import preference learning (Phase 3)
+import type {
+  PreferenceStore,
+  PreferenceLearningConfig,
+  CartPreferenceCheckResult,
+} from './learning/index.js';
+import {
+  checkCartPreferences,
+  createDefaultConfig as createDefaultLearningConfig,
+} from './learning/index.js';
+
 // =============================================================================
 // CartBuilder Result Types
 // =============================================================================
@@ -53,6 +70,8 @@ export interface CartBuilderResultData {
   diff: CartDiff;
   /** Full diff report for Coordinator */
   report: CartDiffReport;
+  /** Preference check result (Phase 3) - optional */
+  preferenceCheck?: CartPreferenceCheckResult;
 }
 
 /**
@@ -73,7 +92,8 @@ export interface CartBuilderResult extends AgentResult {
  * 1. Navigating to order history
  * 2. Loading specified orders
  * 3. Using reorder functionality to populate cart
- * 4. Computing and reporting cart diff
+ * 4. Checking learned preferences (Phase 3)
+ * 5. Computing and reporting cart diff
  *
  * Uses the Selector Registry for all page interactions.
  */
@@ -82,9 +102,35 @@ export class CartBuilder {
   private readonly screenshotDir: string;
   private screenshots: string[] = [];
 
+  // Phase 3: Preference learning support
+  private preferenceStore: PreferenceStore | null = null;
+  private learningConfig: PreferenceLearningConfig;
+
   constructor(config: Partial<CartBuilderConfig> = {}) {
     this.config = CartBuilderConfigSchema.parse(config);
     this.screenshotDir = 'screenshots';
+    this.learningConfig = createDefaultLearningConfig();
+  }
+
+  /**
+   * Set preference store for preference-aware cart building.
+   * Call this before run() to enable preference checking.
+   *
+   * @param store - Preference store for the household
+   * @param config - Optional learning configuration override
+   */
+  setPreferenceStore(store: PreferenceStore, config?: Partial<PreferenceLearningConfig>): void {
+    this.preferenceStore = store;
+    if (config) {
+      this.learningConfig = { ...this.learningConfig, ...config };
+    }
+  }
+
+  /**
+   * Clear preference store (disable preference checking).
+   */
+  clearPreferenceStore(): void {
+    this.preferenceStore = null;
   }
 
   /**
@@ -183,28 +229,54 @@ export class CartBuilder {
       const diff = this.computeDiff(cartBefore, cartAfter);
       logs.push(`Diff: +${diff.summary.addedCount} -${diff.summary.removedCount} ~${diff.summary.changedCount}`);
 
-      // Step 8: Generate report (include screenshots)
+      // Step 7.5 (Phase 3): Check preferences against cart items
+      let preferenceCheck: CartPreferenceCheckResult | undefined;
+      if (this.preferenceStore) {
+        preferenceCheck = this.checkPreferences(cartAfter, sessionId);
+        logger.info('Preference check completed', {
+          itemsWithPreferences: preferenceCheck.itemsWithPreferences,
+          excludedItems: preferenceCheck.excludedItems.length,
+          quantityAdjustments: preferenceCheck.quantityAdjustments.length,
+          averageConfidence: preferenceCheck.averageConfidence.toFixed(2),
+        });
+        logs.push(
+          `Preferences: ${preferenceCheck.itemsWithPreferences}/${cartAfter.itemCount} items with history, ` +
+            `${preferenceCheck.excludedItems.length} suggested exclusions, ` +
+            `${preferenceCheck.quantityAdjustments.length} quantity adjustments`
+        );
+      }
+
+      // Step 8: Generate report (include screenshots and preference check)
       const report = this.generateReport(
         sessionId,
         selectedOrders,
         cartBefore,
         cartAfter,
         diff,
-        this.screenshots
+        this.screenshots,
+        preferenceCheck
       );
 
       logger.info('CartBuilder completed successfully', { diff: diff.summary });
 
+      // Build result data, conditionally including preferenceCheck
+      const resultData: CartBuilderResultData = {
+        ordersLoaded: selectedOrders,
+        orderDetails,
+        cartBefore,
+        cartAfter,
+        diff,
+        report,
+      };
+
+      // Only add preferenceCheck if it exists (for exactOptionalPropertyTypes compatibility)
+      if (preferenceCheck) {
+        resultData.preferenceCheck = preferenceCheck;
+      }
+
       return {
         success: true,
-        data: {
-          ordersLoaded: selectedOrders,
-          orderDetails,
-          cartBefore,
-          cartAfter,
-          diff,
-          report,
-        },
+        data: resultData,
         logs,
       };
     } catch (error) {
@@ -471,7 +543,46 @@ export class CartBuilder {
   }
 
   /**
+   * Check preferences against cart items.
+   * Pure function that computes preference-based recommendations.
+   *
+   * @param cart - Current cart snapshot
+   * @param sessionId - Session identifier
+   * @returns Preference check result with recommendations
+   */
+  private checkPreferences(cart: CartSnapshot, sessionId: string): CartPreferenceCheckResult {
+    if (!this.preferenceStore) {
+      // Return empty result if no preference store
+      return {
+        sessionId,
+        timestamp: new Date(),
+        itemChecks: [],
+        excludedItems: [],
+        quantityAdjustments: [],
+        itemsWithPreferences: 0,
+        itemsWithoutPreferences: cart.itemCount,
+        averageConfidence: 0,
+      };
+    }
+
+    // Convert cart items to the format expected by preference scorer
+    const itemsForCheck = cart.items.map((item) => ({
+      productId: item.productId ?? item.name, // Fallback to name if no productId
+      productName: item.name,
+      quantity: item.quantity,
+    }));
+
+    return checkCartPreferences(
+      itemsForCheck,
+      this.preferenceStore,
+      sessionId,
+      this.learningConfig
+    );
+  }
+
+  /**
    * Generate complete diff report for Coordinator.
+   * Includes preference-based recommendations if available.
    */
   private generateReport(
     sessionId: string,
@@ -479,11 +590,45 @@ export class CartBuilder {
     cartBefore: CartSnapshot,
     cartAfter: CartSnapshot,
     diff: CartDiff,
-    screenshots: string[] = []
+    screenshots: string[] = [],
+    preferenceCheck?: CartPreferenceCheckResult
   ): CartDiffReport {
-    // Calculate confidence based on extraction success
+    // Calculate confidence based on extraction success and preference data
     const hasWarnings = diff.summary.removedCount > 0;
-    const confidence = hasWarnings ? 0.9 : 1.0;
+    let confidence = hasWarnings ? 0.9 : 1.0;
+
+    // Adjust confidence if we have preference data
+    if (preferenceCheck && preferenceCheck.itemsWithPreferences > 0) {
+      // Boost confidence if preferences align with cart
+      const preferenceConfidence = preferenceCheck.averageConfidence;
+      confidence = confidence * 0.7 + preferenceConfidence * 0.3;
+    }
+
+    // Build warnings including preference-based suggestions
+    const warnings: CartDiffReport['warnings'] = [];
+
+    if (preferenceCheck) {
+      // Add warnings for items suggested for exclusion
+      for (const productId of preferenceCheck.excludedItems) {
+        const itemCheck = preferenceCheck.itemChecks.find((c) => c.productId === productId);
+        if (itemCheck) {
+          warnings.push({
+            type: 'quantity_adjusted',
+            message: `"${itemCheck.productName}" is typically removed by user (${itemCheck.reason})`,
+            itemName: itemCheck.productName,
+          });
+        }
+      }
+
+      // Add warnings for quantity adjustments
+      for (const adj of preferenceCheck.quantityAdjustments) {
+        warnings.push({
+          type: 'quantity_adjusted',
+          message: `"${adj.productName}" quantity suggestion: ${adj.originalQuantity} -> ${adj.recommendedQuantity} based on history`,
+          itemName: adj.productName,
+        });
+      }
+    }
 
     return {
       timestamp: new Date(),
@@ -495,7 +640,7 @@ export class CartBuilder {
       },
       diff,
       confidence,
-      warnings: [],
+      warnings,
       screenshots,
     };
   }

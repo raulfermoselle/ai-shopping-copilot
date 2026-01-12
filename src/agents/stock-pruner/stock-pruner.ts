@@ -11,6 +11,8 @@
  * - Estimate days until restock needed
  * - Generate pruning recommendations with confidence scores
  * - Provide human-readable explanations for all decisions
+ * - Learn adaptive restock cadences from user feedback
+ * - Apply confidence adjustments based on prediction history
  *
  * The agent NEVER removes items - it only suggests. The user
  * reviews and approves all changes.
@@ -30,9 +32,18 @@ import {
 } from './types.js';
 import {
   processCartItems,
+  processCartItemsWithLearning,
   summarizeDecisions,
   type CartItemForPruning,
 } from './heuristics.js';
+import {
+  type LearningState,
+  type AdaptiveCadenceConfig,
+  type LearningProgressMetrics,
+  createDefaultLearningState,
+  createDefaultAdaptiveCadenceConfig,
+  calculateLearningProgress,
+} from './learning/index.js';
 
 // =============================================================================
 // StockPruner Result Types
@@ -50,6 +61,10 @@ export interface StockPrunerResultData {
   uncertainItems: UncertainItem[];
   /** Items to keep in cart */
   keepItems: PruneDecision[];
+  /** Updated learning state (if adaptive learning enabled) */
+  learningState?: LearningState;
+  /** Learning progress metrics */
+  learningProgress?: LearningProgressMetrics;
 }
 
 /**
@@ -75,6 +90,12 @@ export interface StockPrunerRunInput {
   userOverrides?: Record<string, UserOverride>;
   /** Reference date for timing calculations (defaults to now) */
   referenceDate?: Date;
+  /** Existing learning state (for adaptive learning) */
+  learningState?: LearningState;
+  /** Adaptive cadence configuration */
+  adaptiveConfig?: AdaptiveCadenceConfig;
+  /** Enable adaptive learning (default: true if learningState provided) */
+  enableAdaptiveLearning?: boolean;
 }
 
 // =============================================================================
@@ -115,6 +136,12 @@ export class StockPruner {
    * pruning recommendations. This is a pure computation - no
    * browser interaction required.
    *
+   * When adaptive learning is enabled, the agent:
+   * - Uses learned cadences instead of category defaults
+   * - Adjusts confidence based on prediction history
+   * - Applies conservative behavior when uncertain
+   * - Updates learning state with new predictions
+   *
    * @param context - Agent execution context
    * @param input - Cart and purchase history to analyze
    * @returns StockPruner result with pruning recommendations
@@ -123,6 +150,10 @@ export class StockPruner {
     const { logger, sessionId } = context;
     const logs: string[] = [];
     const referenceDate = input.referenceDate ?? new Date();
+
+    // Determine if adaptive learning is enabled
+    const enableAdaptive = input.enableAdaptiveLearning ?? (input.learningState !== undefined);
+    const adaptiveConfig = input.adaptiveConfig ?? createDefaultAdaptiveCadenceConfig();
 
     // Yield to event loop - keeps interface consistent with other agents
     // that perform async operations (browser automation)
@@ -133,8 +164,12 @@ export class StockPruner {
         cartItemCount: input.cart.itemCount,
         historyRecordCount: input.purchaseHistory.length,
         config: this.config,
+        adaptiveLearning: enableAdaptive,
       });
       logs.push('StockPruner started');
+      if (enableAdaptive) {
+        logs.push('Adaptive learning enabled');
+      }
 
       // Convert cart items to pruning format
       const cartItems = this.convertCartItems(input.cart);
@@ -149,15 +184,36 @@ export class StockPruner {
       }
       logs.push(`Loaded ${userOverrides.size} user overrides`);
 
-      // Process all cart items
-      const decisions = processCartItems(
-        cartItems,
-        input.purchaseHistory,
-        this.config,
-        userOverrides,
-        referenceDate
-      );
-      logs.push(`Generated ${decisions.length} pruning decisions`);
+      // Initialize or use provided learning state
+      let learningState = input.learningState ?? createDefaultLearningState();
+      let decisions: PruneDecision[];
+
+      if (enableAdaptive) {
+        // Process with adaptive learning
+        const result = processCartItemsWithLearning(
+          cartItems,
+          input.purchaseHistory,
+          this.config,
+          learningState,
+          adaptiveConfig,
+          userOverrides,
+          referenceDate
+        );
+        decisions = result.decisions;
+        learningState = result.updatedLearningState;
+        logs.push(`Generated ${decisions.length} adaptive pruning decisions`);
+        logs.push(`Learning state updated with ${result.newPredictions} new predictions`);
+      } else {
+        // Process without adaptive learning (original behavior)
+        decisions = processCartItems(
+          cartItems,
+          input.purchaseHistory,
+          this.config,
+          userOverrides,
+          referenceDate
+        );
+        logs.push(`Generated ${decisions.length} pruning decisions`);
+      }
 
       // Calculate summary statistics
       const summary = summarizeDecisions(decisions);
@@ -183,20 +239,40 @@ export class StockPruner {
         summary
       );
 
+      // Calculate learning progress if adaptive
+      let learningProgress: LearningProgressMetrics | undefined;
+      if (enableAdaptive) {
+        learningProgress = calculateLearningProgress(learningState, adaptiveConfig, referenceDate);
+        logs.push(`Learning progress: ${learningProgress.summary}`);
+      }
+
       logger.info('StockPruner completed successfully', {
         totalItems: summary.totalItems,
         suggestedPrunes: summary.suggestedForPruning,
         averageConfidence: summary.averageConfidence.toFixed(2),
+        adaptiveLearning: enableAdaptive,
+        productsLearned: learningProgress?.productsLearned,
       });
+
+      // Build result data, conditionally including learning state
+      const resultData: StockPrunerResultData = {
+        report,
+        recommendedRemovals,
+        uncertainItems,
+        keepItems,
+      };
+
+      // Only include learning state if adaptive learning is enabled
+      if (enableAdaptive) {
+        resultData.learningState = learningState;
+        if (learningProgress) {
+          resultData.learningProgress = learningProgress;
+        }
+      }
 
       return {
         success: true,
-        data: {
-          report,
-          recommendedRemovals,
-          uncertainItems,
-          keepItems,
-        },
+        data: resultData,
         logs,
       };
     } catch (error) {
@@ -360,5 +436,25 @@ export function createAggressiveStockPruner(): StockPruner {
     conservativeMode: false,
     minPruneConfidence: 0.6,
     pruneThreshold: 0.7, // Prune if less than 70% through cycle
+  });
+}
+
+/**
+ * Create an adaptive StockPruner that learns from user feedback.
+ *
+ * This pruner uses adaptive learning to:
+ * - Learn household-specific restock patterns
+ * - Adjust confidence based on prediction accuracy
+ * - Apply conservative behavior when uncertain
+ *
+ * @param conservativeMode - Whether to use conservative pruning (default: true)
+ * @returns StockPruner configured for adaptive learning
+ */
+export function createAdaptiveStockPruner(conservativeMode: boolean = true): StockPruner {
+  return new StockPruner({
+    conservativeMode,
+    minPruneConfidence: conservativeMode ? 0.75 : 0.65,
+    pruneThreshold: conservativeMode ? 0.6 : 0.7,
+    useLearnedCadences: true,
   });
 }

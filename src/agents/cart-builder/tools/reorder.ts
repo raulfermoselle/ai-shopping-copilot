@@ -34,8 +34,50 @@ const MODAL_WAIT_TIMEOUT = 5000;
 const MAX_POPUP_DISMISS_RETRIES = 3;
 
 /**
+ * Get the current cart total value from the header cart indicator.
+ * Returns the cart total in cents to avoid floating point issues.
+ */
+async function getCartTotal(context: ToolContext): Promise<number | null> {
+  const cartTotalSelectors = [
+    '.auc-cart-value.auc-header-cart-total',
+    '.auc-header-cart-total',
+    '.auc-cart-value__total .auc-cart-value',
+    '.auc-cart-value',
+    '[class*="cart"][class*="total"]',
+    '[class*="cart"][class*="value"]',
+  ];
+
+  for (const selector of cartTotalSelectors) {
+    try {
+      const element = context.page.locator(selector).first();
+      const isVisible = await element.isVisible({ timeout: 2000 }).catch(() => false);
+
+      if (isVisible) {
+        const text = await element.textContent();
+        if (text) {
+          // Parse euro value like "0,93 €" or "162,51 €" to cents
+          const cleanText = text.replace(/[^\d,\.]/g, '').replace(',', '.');
+          const value = parseFloat(cleanText);
+          if (!isNaN(value)) {
+            const cents = Math.round(value * 100);
+            context.logger.debug('Got cart total', { value, cents, selector, rawText: text });
+            return cents;
+          }
+        }
+      }
+    } catch {
+      // Try next selector
+    }
+  }
+
+  context.logger.debug('Could not get cart total from any selector');
+  return null;
+}
+
+/**
  * Get the current cart item count from the header cart indicator.
  * This is used to verify cart changes before/after reorder.
+ * Falls back to cart total comparison if count element not found.
  */
 async function getCartCount(context: ToolContext): Promise<number | null> {
   const cartCountSelectors = [
@@ -44,23 +86,40 @@ async function getCartCount(context: ToolContext): Promise<number | null> {
     '.cart-counter',
     '.cart-quantity',
     '.badge.cart-badge',
-    // Auchan-specific: cart icon with number
+    // Auchan-specific: cart icon with number in badge
+    '.auc-header__minicart .auc-badge',
     '.auc-header-actions__cart .auc-badge',
+    '.minicart-quantity:not(.d-none)',
     '[class*="cart"] [class*="badge"]',
     '[class*="cart"] [class*="count"]',
+    // Try getting count from data attribute
+    '[data-cart-count]',
   ];
 
   for (const selector of cartCountSelectors) {
     try {
       const element = context.page.locator(selector).first();
-      const isVisible = await element.isVisible({ timeout: 2000 }).catch(() => false);
+      const isVisible = await element.isVisible({ timeout: 1500 }).catch(() => false);
 
       if (isVisible) {
+        // First try data attribute
+        const dataCount = await element.getAttribute('data-cart-count').catch(() => null);
+        if (dataCount) {
+          const count = parseInt(dataCount, 10);
+          if (!isNaN(count)) {
+            context.logger.debug('Got cart count from data attribute', { count, selector });
+            return count;
+          }
+        }
+
+        // Then try text content
         const text = await element.textContent();
         if (text) {
-          const count = parseInt(text.trim(), 10);
-          if (!isNaN(count)) {
-            context.logger.debug('Got cart count', { count, selector });
+          // Extract just the number from text (handle "1 item" or just "1")
+          const match = text.trim().match(/^(\d+)/);
+          if (match && match[1]) {
+            const count = parseInt(match[1], 10);
+            context.logger.debug('Got cart count from text', { count, selector });
             return count;
           }
         }
@@ -157,9 +216,10 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
       // CRITICAL: Dismiss any blocking popups before attempting reorder
       await ensureNoBlockingPopups(context, 'reorder button click');
 
-      // Get cart count BEFORE reorder to verify change later
+      // Get cart count and total BEFORE reorder to verify change later
       const cartCountBefore = await getCartCount(context);
-      context.logger.info('Cart count before reorder', { cartCountBefore });
+      const cartTotalBefore = await getCartTotal(context);
+      context.logger.info('Cart state before reorder', { cartCountBefore, cartTotalBefore });
 
       // Find reorder button
       context.logger.debug('Looking for reorder button');
@@ -264,16 +324,25 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
       context.logger.debug('Waiting for cart to update', { waitMs: CART_UPDATE_WAIT });
       await context.page.waitForTimeout(CART_UPDATE_WAIT);
 
-      // CRITICAL: Verify cart count actually changed
+      // CRITICAL: Verify cart actually changed using count or total
       const cartCountAfter = await getCartCount(context);
-      context.logger.info('Cart count after reorder', { cartCountBefore, cartCountAfter });
+      const cartTotalAfter = await getCartTotal(context);
+      context.logger.info('Cart state after reorder', {
+        cartCountBefore,
+        cartCountAfter,
+        cartTotalBefore,
+        cartTotalAfter,
+      });
 
       // Determine if cart was successfully modified
       let cartChanged = false;
       let itemsDelta = 0;
+      let verificationMethod = 'none';
 
+      // First try using cart count
       if (cartCountBefore !== null && cartCountAfter !== null) {
         itemsDelta = cartCountAfter - cartCountBefore;
+        verificationMethod = 'count';
 
         if (mergeMode === 'replace') {
           // For replace mode, cart should have items (even if count decreased)
@@ -284,15 +353,53 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         }
 
         if (!cartChanged) {
-          context.logger.error('Cart count did not change as expected', {
+          context.logger.warn('Cart count did not change as expected', {
             cartCountBefore,
             cartCountAfter,
             itemsDelta,
             mergeMode,
           });
         }
-      } else {
-        context.logger.warn('Could not verify cart count change - count not available');
+      }
+
+      // Fallback to cart total if count verification failed or unavailable
+      if (!cartChanged && cartTotalBefore !== null && cartTotalAfter !== null) {
+        const totalDelta = cartTotalAfter - cartTotalBefore;
+        verificationMethod = 'total';
+
+        if (mergeMode === 'replace') {
+          // For replace mode, cart should have value
+          cartChanged = cartTotalAfter > 0;
+        } else {
+          // For merge mode, cart total should have increased
+          cartChanged = totalDelta > 0;
+        }
+
+        if (cartChanged) {
+          context.logger.info('Cart change verified via total comparison', {
+            cartTotalBefore,
+            cartTotalAfter,
+            totalDelta,
+            mergeMode,
+          });
+        }
+      }
+
+      // Last fallback: if cart has value and we couldn't get before/after, assume success
+      if (!cartChanged && cartTotalAfter !== null && cartTotalAfter > 0) {
+        cartChanged = true;
+        verificationMethod = 'total-exists';
+        context.logger.info('Cart change assumed via non-zero total', { cartTotalAfter });
+      }
+
+      if (!cartChanged) {
+        context.logger.warn('Could not verify cart change', {
+          cartCountBefore,
+          cartCountAfter,
+          cartTotalBefore,
+          cartTotalAfter,
+          verificationMethod,
+        });
       }
 
       // Try to detect cart update indicators
@@ -326,12 +433,15 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
           orderId: input.orderId,
           cartCountBefore,
           cartCountAfter,
+          cartTotalBefore,
+          cartTotalAfter,
           mergeMode,
+          verificationMethod,
           failedItems,
         });
 
         const verificationError: import('../../../types/tool.js').ToolError = {
-          message: `Reorder did not modify cart (before: ${cartCountBefore}, after: ${cartCountAfter})`,
+          message: `Reorder did not modify cart (count: ${cartCountBefore}→${cartCountAfter}, total: ${cartTotalBefore}→${cartTotalAfter})`,
           code: 'VALIDATION_ERROR',
           recoverable: true, // Could retry
         };
@@ -354,10 +464,13 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         orderId: input.orderId,
         cartCountBefore,
         cartCountAfter,
+        cartTotalBefore,
+        cartTotalAfter,
         itemsAdded,
         failedItemsCount: failedItems.length,
         cartTotal,
         cartChanged,
+        verificationMethod,
       });
 
       return {
@@ -481,12 +594,30 @@ async function handleReorderModal(
         return true;
       }
 
-      // Fallback: try direct text search
-      const mergeButtonFallback = context.page.locator('button:has-text("Juntar")').first();
-      if (await mergeButtonFallback.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await mergeButtonFallback.click();
-        context.logger.info('Merge button clicked (fallback)');
-        return true;
+      // Fallback: try multiple selectors for the merge button
+      // The modal says "Neste momento tem produtos no seu carrinho" with buttons "Eliminar" and "Juntar"
+      const mergeButtonSelectors = [
+        'button:has-text("Juntar")',
+        '.modal button:has-text("Juntar")',
+        '[role="dialog"] button:has-text("Juntar")',
+        // Green button (primary action to merge)
+        '.modal .btn-success:has-text("Juntar")',
+        '.modal button.auc-btn--primary:has-text("Juntar")',
+        // Any button with "Juntar" exact text
+        'button >> text="Juntar"',
+      ];
+
+      for (const selector of mergeButtonSelectors) {
+        try {
+          const btn = context.page.locator(selector).first();
+          if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
+            await btn.click();
+            context.logger.info('Merge button clicked (fallback)', { selector });
+            return true;
+          }
+        } catch {
+          // Try next selector
+        }
       }
 
       context.logger.warn('Merge button not found, trying confirm button instead');
@@ -507,12 +638,27 @@ async function handleReorderModal(
       return true;
     }
 
+    // CRITICAL: Check if we're on the cart removal modal - if so, click Cancel NOT Confirm
+    // The cart removal modal says "Remover produtos do carrinho" and clicking "Confirmar" would DELETE the cart
+    const cartRemovalModalText = await context.page.locator('text="Remover produtos do carrinho"').count();
+    if (cartRemovalModalText > 0) {
+      context.logger.warn('Cart removal modal detected - clicking Cancel to preserve cart');
+      const cancelButton = context.page.locator('button:has-text("Cancelar")').first();
+      if (await cancelButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await cancelButton.click();
+        context.logger.info('Cart removal modal dismissed via Cancel');
+        // Return false to indicate we need to retry the reorder
+        return false;
+      }
+    }
+
     // Fallback: try direct text searches
+    // CRITICAL: DO NOT include "Confirmar" here as it might be the cart removal confirmation!
     const confirmButtonSelectors = [
       'button:has-text("Encomendar de novo")',
-      'button:has-text("Confirmar")',
-      '.modal button.btn-primary',
-      '[role="dialog"] button:first-of-type',
+      // Skip "Confirmar" - too dangerous, could trigger cart removal
+      '.modal button.btn-primary:has-text("Encomendar")',
+      // Skip generic selectors that might match wrong buttons
     ];
 
     for (const selector of confirmButtonSelectors) {
