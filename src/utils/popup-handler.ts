@@ -57,20 +57,8 @@ const POPUP_DISMISS_STRATEGIES = [
       return !isReorderModal; // Only dismiss if NOT reorder modal
     },
   },
-  // Generic notification/promotional popups
-  // IMPORTANT: Don't dismiss the reorder modal
-  {
-    name: 'generic-dismiss',
-    selector: '.notification-close, .popup-dismiss, [data-dismiss="modal"]',
-    description: 'Generic dismiss button',
-    priority: 1,
-    // Don't dismiss if this is the reorder modal (has Juntar or Eliminar button)
-    validateContext: async (page: Page) => {
-      const isReorderModal = await page.locator('button:has-text("Juntar")').count() > 0;
-      const hasEliminar = await page.locator('button:has-text("Eliminar")').count() > 0;
-      return !isReorderModal && !hasEliminar; // Only dismiss if NOT reorder modal
-    },
-  },
+  // REMOVED: Generic dismiss pattern was too risky - could match cart removal buttons
+  // Only use specific, known-safe patterns above
 ];
 
 /**
@@ -84,8 +72,58 @@ export interface DismissPopupsOptions {
   /** Logger function */
   logger?: {
     info: (msg: string, ctx?: Record<string, unknown>) => void;
+    warn: (msg: string, ctx?: Record<string, unknown>) => void;
     debug: (msg: string, ctx?: Record<string, unknown>) => void;
   };
+}
+
+/**
+ * DANGEROUS BUTTON PATTERNS - Never click these!
+ * These could trigger destructive actions like clearing the cart.
+ */
+const DANGEROUS_BUTTON_PATTERNS = [
+  'Remover todos',  // "Remove all" button text (substring)
+  'Remover todos os produtos',  // Full button text on cart page
+  'Eliminar tudo',  // Alternative "Delete all" text
+  'auc-cart__remove-all',  // Remove all button class
+  'Confirmar',  // Confirm button on removal modal - NEVER click this!
+];
+
+/**
+ * Check if an element is a dangerous button that should never be clicked.
+ */
+async function isDangerousButton(element: import('playwright').Locator): Promise<boolean> {
+  try {
+    // Check text content
+    const text = await element.textContent().catch(() => null);
+    if (text) {
+      for (const pattern of DANGEROUS_BUTTON_PATTERNS) {
+        if (text.includes(pattern)) {
+          return true;
+        }
+      }
+    }
+
+    // Check class attribute
+    const className = await element.getAttribute('class').catch(() => null);
+    if (className) {
+      for (const pattern of DANGEROUS_BUTTON_PATTERNS) {
+        if (className.includes(pattern)) {
+          return true;
+        }
+      }
+    }
+
+    // Check if it has data-toggle="modal" targeting remove-all modal
+    const dataTarget = await element.getAttribute('data-target').catch(() => null);
+    if (dataTarget && dataTarget.includes('remove-all')) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;  // On error, assume not dangerous (don't block legitimate clicks)
+  }
 }
 
 /**
@@ -129,6 +167,17 @@ export async function dismissPopups(
         const isVisible = await element.isVisible({ timeout }).catch(() => false);
 
         if (isVisible) {
+          // CRITICAL SAFETY CHECK: Never click dangerous buttons
+          if (await isDangerousButton(element)) {
+            if (verbose && logger) {
+              logger.warn(`BLOCKED: Refusing to click dangerous button`, {
+                strategy: strategy.name,
+                reason: 'Element matches dangerous button pattern',
+              });
+            }
+            continue;  // Skip this element
+          }
+
           if (verbose && logger) {
             logger.info(`Dismissing popup: ${strategy.description}`, { strategy: strategy.name });
           }

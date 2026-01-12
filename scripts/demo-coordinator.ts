@@ -24,11 +24,11 @@ import 'dotenv/config';
  */
 
 import { chromium } from 'playwright';
-import { createCoordinator } from '../src/agents/coordinator/coordinator.js';
-import { createLogger } from '../src/utils/logger.js';
-import { attachPopupObserver, detachPopupObserver } from '../src/utils/auto-popup-dismisser.js';
-import type { AgentContext, WorkingMemory } from '../src/types/agent.js';
-import type { ReviewPack } from '../src/agents/coordinator/types.js';
+import { createCoordinator } from '../dist/agents/coordinator/coordinator.js';
+import { createLogger } from '../dist/utils/logger.js';
+import { attachPopupObserver, detachPopupObserver } from '../dist/utils/auto-popup-dismisser.js';
+import type { AgentContext, WorkingMemory } from '../dist/types/agent.js';
+import type { ReviewPack } from '../dist/agents/coordinator/types.js';
 
 // ANSI colors for terminal output
 const colors = {
@@ -145,7 +145,19 @@ function printReviewPack(pack: ReviewPack): void {
 async function main(): Promise<void> {
   printBanner();
 
-  const logger = createLogger('info', 'Demo');
+  const baseLogger = createLogger('info', 'Demo');
+
+  // Progress tracking - reset on any log activity
+  let lastProgressTime = Date.now();
+  const resetProgress = () => { lastProgressTime = Date.now(); };
+
+  // Wrap logger to track activity for stuck detection
+  const logger = {
+    info: (msg: string, ctx?: Record<string, unknown>) => { resetProgress(); baseLogger.info(msg, ctx); },
+    warn: (msg: string, ctx?: Record<string, unknown>) => { resetProgress(); baseLogger.warn(msg, ctx); },
+    error: (msg: string, ctx?: Record<string, unknown>) => { resetProgress(); baseLogger.error(msg, ctx); },
+    debug: (msg: string, ctx?: Record<string, unknown>) => { resetProgress(); baseLogger.debug(msg, ctx); },
+  };
 
   // Check credentials
   const email = process.env.AUCHAN_EMAIL;
@@ -224,15 +236,9 @@ async function main(): Promise<void> {
     console.log('  5. Generate Review Pack');
     console.log();
 
-    // Setup stuck detection
-    let lastProgressTime = Date.now();
+    // Setup stuck detection (progress tracked via logger wrapper above)
     let stuckDetectionInterval: NodeJS.Timeout | null = null;
     const STUCK_TIMEOUT_MS = 30000; // 30 seconds - agent should detect stuck state quickly
-
-    const updateProgress = (stepName: string) => {
-      lastProgressTime = Date.now();
-      logger.info(`Progress: ${stepName}`, { timestamp: new Date().toISOString() });
-    };
 
     stuckDetectionInterval = setInterval(async () => {
       const timeSinceProgress = Date.now() - lastProgressTime;
@@ -251,7 +257,7 @@ async function main(): Promise<void> {
     }, 10000); // Check every 10 seconds
 
     try {
-      updateProgress('demo-start');
+      logger.info('Progress: demo-start');
 
       const coordinator = createCoordinator({
         maxOrdersToLoad: 3,
@@ -260,9 +266,9 @@ async function main(): Promise<void> {
         maxRetries: 2,
       });
 
-      updateProgress('coordinator-created');
+      logger.info('Progress: coordinator-created');
       const result = await coordinator.run(context, email, 'household-demo');
-      updateProgress('coordinator-completed');
+      logger.info('Progress: coordinator-completed');
 
       // Clear stuck detection
       if (stuckDetectionInterval) {

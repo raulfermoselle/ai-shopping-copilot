@@ -32,23 +32,7 @@ function parseCurrency(text: string): number {
   return isNaN(value) ? 0 : value;
 }
 
-/**
- * Extract product ID from Auchan product URL
- * URL format: https://www.auchan.pt/pt/produtos/ID or similar
- */
-function extractProductId(url: string): string | undefined {
-  const match = url.match(/\/produtos\/([a-zA-Z0-9-]+)/);
-  return match?.[1];
-}
-
-/**
- * Parse quantity from input value or text
- */
-function parseQuantity(value: string | null): number {
-  if (!value) return 1;
-  const qty = parseInt(value.trim(), 10);
-  return isNaN(qty) || qty < 1 ? 1 : qty;
-}
+// Note: extractProductId and parseQuantity removed - not needed with JS extraction approach
 
 /**
  * Scan Cart Tool
@@ -81,6 +65,16 @@ export const scanCartTool: Tool<ScanCartInput, ScanCartOutput> = {
         await context.page.waitForTimeout(2000);
       } else {
         context.logger.debug('Already on cart page');
+      }
+
+      // CRITICAL SAFETY CHECK: If cart removal modal is showing, click Cancelar IMMEDIATELY
+      // This modal should NEVER appear on its own - if it does, something clicked "Remover todos"
+      const removalModalVisible = await context.page.locator('text="Remover produtos do carrinho"').isVisible({ timeout: 1000 }).catch(() => false);
+      if (removalModalVisible) {
+        context.logger.warn('DANGER: Cart removal modal detected! Clicking Cancelar to keep items');
+        const cancelarButton = context.page.locator('button:has-text("Cancelar")').first();
+        await cancelarButton.click({ timeout: 2000 }).catch(() => {});
+        await context.page.waitForTimeout(500);
       }
 
       // CRITICAL: Aggressively dismiss ALL blocking popups
@@ -167,11 +161,18 @@ export const scanCartTool: Tool<ScanCartInput, ScanCartOutput> = {
       if (input.expandAll) {
         context.logger.debug('Checking for expandable sections');
         // Look for common "show more" buttons
+        // CRITICAL: Exclude any buttons containing "Remover" to avoid cart clearing
         const expandButtons = await context.page.locator('button:has-text("Ver todos"), button:has-text("Mostrar")').all();
         for (const button of expandButtons) {
           const isVisible = await button.isVisible().catch(() => false);
           if (isVisible) {
-            context.logger.debug('Clicking expand button');
+            // SAFETY CHECK: Skip any button that contains dangerous text
+            const buttonText = await button.textContent().catch(() => '') || '';
+            if (buttonText.includes('Remover') || buttonText.includes('Eliminar') || buttonText.includes('remover')) {
+              context.logger.warn('BLOCKED: Skipping dangerous expand button', { buttonText });
+              continue;
+            }
+            context.logger.debug('Clicking expand button', { buttonText: buttonText.substring(0, 50) });
             await button.click();
             await context.page.waitForTimeout(1000);
           }
@@ -193,8 +194,12 @@ export const scanCartTool: Tool<ScanCartInput, ScanCartOutput> = {
         '[data-testid="cart-items"]',
         '.cart-items-container',
         'main .cart-list',
-        // Fallback: get the first section that has cart products
-        'section:has(.auc-cart__product)',
+        // More flexible patterns based on actual Auchan cart structure
+        '.auc-cart',
+        '[class*="cart-container"]',
+        'main [class*="cart"]',
+        // Fallback: the main content area that has the cart heading
+        'main',
       ];
 
       let cartContainer = null;
@@ -213,111 +218,179 @@ export const scanCartTool: Tool<ScanCartInput, ScanCartOutput> = {
         cartContainer = context.page.locator('body');
       }
 
-      // Now find items WITHIN the cart container
-      // Use the Auchan-specific product class
-      const itemElements = await cartContainer.locator('.auc-cart__product').all();
+      // PRIMARY APPROACH: Use JS extraction to get cart data directly from DOM
+      // This is more reliable than trying to match complex element structures
+      context.logger.debug('Using JS extraction for cart items');
 
-      context.logger.info('Found cart items', { count: itemElements.length });
+      // Try to extract cart data directly from the page's DOM
+      // Use string evaluation to avoid TypeScript DOM type issues
+      const jsCartData = await context.page.evaluate(`
+        (function() {
+          var items = [];
+          var debug = [];
 
-      for (let i = 0; i < itemElements.length; i++) {
-        const itemElement = itemElements[i];
-        if (!itemElement) continue;
+          // STRATEGY 1: Look for Auchan cart item rows by class patterns
+          // Auchan uses classes like auc-cart-item, auc-product, etc.
+          var cartItemSelectors = [
+            '.auc-cart-item',
+            '.auc-cart__item',
+            '[class*="cart-item"]',
+            '[class*="CartItem"]',
+            '[data-testid*="cart-item"]',
+            '.cart-product',
+            '.auc-product-line'
+          ];
 
-        try {
-          // Extract product name
-          const nameElement = await itemElement.locator(
-            resolver.buildCompositeSelector('cart', 'productName') || '.auc-cart__product-name, .product-name'
-          ).first();
-          const name = (await nameElement.textContent())?.trim() || `Unknown Product ${i + 1}`;
-
-          // Extract product URL
-          let productUrl: string | undefined;
-          try {
-            const linkElement = await itemElement.locator(
-              resolver.buildCompositeSelector('cart', 'productLink') || 'a[href*="/produtos/"]'
-            ).first();
-            productUrl = (await linkElement.getAttribute('href')) || undefined;
-          } catch {
-            productUrl = undefined;
-          }
-          const fullProductUrl = productUrl && !productUrl.startsWith('http')
-            ? `https://www.auchan.pt${productUrl}`
-            : productUrl;
-          const productId = fullProductUrl ? extractProductId(fullProductUrl) : undefined;
-
-          // Extract quantity
-          let quantityValue: string | null = null;
-          try {
-            const quantityInput = await itemElement.locator(
-              resolver.buildCompositeSelector('cart', 'productQuantityInput') || 'input[type="number"]'
-            ).first();
-            quantityValue = await quantityInput.getAttribute('value');
-          } catch {
-            quantityValue = null;
-          }
-          const quantity = parseQuantity(quantityValue);
-
-          // Extract unit price
-          let priceText: string | null = null;
-          try {
-            const priceElement = await itemElement.locator(
-              resolver.buildCompositeSelector('cart', 'productUnitPrice') || '.auc-cart__product-price, .product-price'
-            ).first();
-            priceText = await priceElement.textContent();
-          } catch {
-            priceText = null;
-          }
-          const unitPrice = priceText ? parseCurrency(priceText) : 0;
-
-          // Check availability
-          let available = true;
-          try {
-            const unavailableElement = await itemElement.locator(
-              resolver.buildCompositeSelector('cart', 'productUnavailableIndicator') || '.unavailable, .out-of-stock'
-            ).first();
-            available = !(await unavailableElement.isVisible().catch(() => false));
-          } catch {
-            available = true;
-          }
-
-          // Extract availability note if unavailable
-          let availabilityNote: string | undefined;
-          if (!available) {
-            try {
-              const availabilityElement = await itemElement.locator(
-                resolver.buildCompositeSelector('cart', 'productAvailability') || '.product-availability, .availability'
-              ).first();
-              availabilityNote = (await availabilityElement.textContent())?.trim();
-            } catch {
-              availabilityNote = undefined;
+          var cartItems = [];
+          for (var s = 0; s < cartItemSelectors.length; s++) {
+            var found = document.querySelectorAll(cartItemSelectors[s]);
+            if (found.length > 0 && found.length < 200) {
+              debug.push('Found ' + found.length + ' items with: ' + cartItemSelectors[s]);
+              cartItems = found;
+              break;
             }
           }
 
-          const cartItem: CartItem = {
-            productId,
-            name,
-            productUrl: fullProductUrl,
-            quantity,
-            unitPrice,
-            available,
-            availabilityNote,
-          };
+          // STRATEGY 2: If no cart items found, look for product links with +/- buttons nearby
+          if (cartItems.length === 0) {
+            debug.push('Trying Strategy 2: product links with buttons');
+            // Find elements that have both a product link AND increment/decrement buttons
+            var allRows = document.querySelectorAll('[class*="row"], [class*="item"], [class*="line"], article, li');
+            allRows.forEach(function(row) {
+              // Must have a product link
+              var hasProductLink = row.querySelector('a[href*="/p/"], a[href*="/produtos/"], a[href*="auchan.pt"]');
+              // Must have quantity buttons (+ or -)
+              var hasQtyButtons = row.querySelector('button[aria-label*="+"], button[aria-label*="-"], button[class*="plus"], button[class*="minus"], button[class*="increment"], button[class*="decrement"]');
+              // Alternative: input with number type
+              var hasQtyInput = row.querySelector('input[type="number"], input[type="text"][class*="qty"]');
 
-          items.push(cartItem);
-          context.logger.debug('Extracted cart item', {
-            name,
-            quantity,
-            unitPrice,
-            available,
+              if (hasProductLink && (hasQtyButtons || hasQtyInput)) {
+                cartItems = Array.from(cartItems);
+                cartItems.push(row);
+              }
+            });
+            debug.push('Strategy 2 found: ' + cartItems.length);
+          }
+
+          // STRATEGY 3: If still nothing, try to find cart structure from data layer
+          if (cartItems.length === 0 && window.dataLayer) {
+            debug.push('Trying Strategy 3: dataLayer');
+            for (var i = 0; i < window.dataLayer.length; i++) {
+              var entry = window.dataLayer[i];
+              if (entry && entry.ecommerce && entry.ecommerce.cart) {
+                var cartData = entry.ecommerce.cart;
+                if (cartData.products) {
+                  cartData.products.forEach(function(p) {
+                    items.push({
+                      name: p.name || p.product_name || 'Unknown',
+                      quantity: parseInt(p.quantity) || 1,
+                      price: (p.price || '0') + ' €',
+                      available: true
+                    });
+                  });
+                }
+              }
+            }
+            if (items.length > 0) {
+              debug.push('Got ' + items.length + ' from dataLayer');
+              console.log('[ScanCart Debug]', debug.join('; '));
+              return items;
+            }
+          }
+
+          // Process found cart item elements
+          debug.push('Processing ' + cartItems.length + ' cart item elements');
+          for (var i = 0; i < cartItems.length; i++) {
+            var container = cartItems[i];
+
+            // Get product name - try multiple selectors
+            var nameEl = container.querySelector('a[href*="/p/"], a[href*="/produtos/"], [class*="product-name"], [class*="item-name"], h3, h4');
+            var name = nameEl ? (nameEl.textContent || '').trim() : '';
+
+            // Skip if no name or name too short
+            if (!name || name.length < 3) continue;
+
+            // Get quantity - try input first, then text display
+            var quantity = 1;
+            var qtyInput = container.querySelector('input[type="number"], input[class*="qty"], input[class*="quantity"]');
+            if (qtyInput && qtyInput.value) {
+              quantity = parseInt(qtyInput.value) || 1;
+            } else {
+              // Look for quantity display between +/- buttons
+              var qtyDisplay = container.querySelector('[class*="qty-value"], [class*="quantity"], [class*="count"]');
+              if (qtyDisplay) {
+                var qtyText = (qtyDisplay.textContent || '').trim();
+                var qtyMatch = qtyText.match(/^(\\d+)$/);
+                if (qtyMatch) {
+                  quantity = parseInt(qtyMatch[1]) || 1;
+                }
+              }
+            }
+
+            // Get price
+            var price = '0';
+            var priceEls = container.querySelectorAll('[class*="price"]:not([class*="total"])');
+            for (var p = 0; p < priceEls.length; p++) {
+              var priceText = (priceEls[p].textContent || '').trim();
+              if (priceText.match(/\\d+[,.]\\d+\\s*€/)) {
+                price = priceText;
+                break;
+              }
+            }
+
+            // Check availability
+            var unavailable = container.querySelector('[class*="unavailable"], [class*="indisponivel"], [class*="out-of-stock"]');
+            var isAvailable = !unavailable;
+
+            // Avoid duplicates
+            var isDuplicate = items.some(function(item) { return item.name === name; });
+            if (!isDuplicate) {
+              items.push({
+                name: name,
+                quantity: quantity,
+                price: price,
+                available: isAvailable
+              });
+            }
+          }
+
+          // STRATEGY 4: Fallback - count from cart header if we got nothing
+          if (items.length === 0) {
+            debug.push('Trying Strategy 4: cart header count');
+            // Try to get item count from cart header
+            var headerCount = document.querySelector('[class*="cart-count"], [class*="item-count"], [data-cart-count]');
+            if (headerCount) {
+              var countText = headerCount.textContent || headerCount.getAttribute('data-cart-count');
+              debug.push('Header shows: ' + countText);
+            }
+          }
+
+          console.log('[ScanCart Debug]', debug.join('; '));
+          return items;
+        })()
+      `).catch(() => []) as Array<{name: string; quantity: number; price: string; available: boolean}>;
+
+      if (jsCartData.length > 0) {
+        context.logger.info('Extracted cart items via JS', { count: jsCartData.length });
+        // Convert JS data to CartItem format directly
+        for (const jsItem of jsCartData) {
+          items.push({
+            name: jsItem.name,
+            quantity: jsItem.quantity > 0 ? jsItem.quantity : 1,
+            unitPrice: parseCurrency(jsItem.price),
+            available: jsItem.available !== false,
           });
-        } catch (err) {
-          context.logger.warn('Failed to extract cart item', {
-            index: i,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          // Continue with other items
         }
+        context.logger.info('Cart scan completed via JS extraction', {
+          itemCount: items.length,
+          totalPrice: items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
+        });
+      } else {
+        context.logger.warn('JS extraction found no cart items');
       }
+
+      // JS extraction is our primary method - no element-by-element fallback needed
+      context.logger.info('Cart items extracted', { count: items.length });
 
       // Step 5: Extract cart totals
       let totalPrice = 0;

@@ -35,10 +35,11 @@ const POPUP_PATTERNS = [
   { selector: '#onetrust-accept-btn-handler, button:has-text("Aceitar")', priority: 80, name: 'cookie-consent' },
 
   // Modal close buttons - SKIP if reorder modal is showing
-  { selector: '.modal-close, [aria-label="Close"], [aria-label="Fechar"], button:has-text("×")', priority: 70, name: 'modal-close', skipIfReorderModal: true },
+  // IMPORTANT: Only match specific aria-label patterns, avoid generic class selectors
+  { selector: '[aria-label="Close"], [aria-label="Fechar"]', priority: 70, name: 'modal-close', skipIfReorderModal: true },
 
-  // Generic dismiss buttons - SKIP if reorder modal is showing
-  { selector: '.notification-close, .popup-dismiss, [data-dismiss="modal"]', priority: 60, name: 'generic-dismiss', skipIfReorderModal: true },
+  // REMOVED: Generic dismiss pattern (.notification-close, .popup-dismiss, [data-dismiss="modal"])
+  // was too risky - could match cart removal buttons or other dangerous elements
 ];
 
 /**
@@ -70,6 +71,58 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
       }
 
       var dismissalCount = 0;
+
+      // DANGEROUS BUTTON PATTERNS - Never click these!
+      var dangerousPatterns = [
+        'Remover todos',      // "Remove all" button text (substring match)
+        'Remover todos os produtos',  // Full button text on cart page
+        'Eliminar tudo',      // Alternative "Delete all" text
+        'auc-cart__remove-all', // Remove all button class
+        'remove-all-products', // Modal target ID
+        'Confirmar'           // Confirm button on removal modal - NEVER click!
+      ];
+
+      function isDangerousElement(element) {
+        // Check text content
+        var text = element.textContent || '';
+        for (var i = 0; i < dangerousPatterns.length; i++) {
+          if (text.indexOf(dangerousPatterns[i]) >= 0) {
+            return true;
+          }
+        }
+
+        // Check class attribute
+        var className = element.className || '';
+        if (typeof className === 'string') {
+          for (var i = 0; i < dangerousPatterns.length; i++) {
+            if (className.indexOf(dangerousPatterns[i]) >= 0) {
+              return true;
+            }
+          }
+        }
+
+        // Check data-target attribute (Bootstrap modal trigger)
+        var dataTarget = element.getAttribute('data-target');
+        if (dataTarget) {
+          for (var i = 0; i < dangerousPatterns.length; i++) {
+            if (dataTarget.indexOf(dangerousPatterns[i]) >= 0) {
+              return true;
+            }
+          }
+        }
+
+        // Check data-toggle attribute (might trigger modal)
+        var dataToggle = element.getAttribute('data-toggle');
+        if (dataToggle === 'modal') {
+          // Check if the modal target is dangerous
+          var target = element.getAttribute('data-target');
+          if (target && target.indexOf('remove') >= 0) {
+            return true;
+          }
+        }
+
+        return false;
+      }
 
       function isReorderModalVisible() {
         // The reorder modal has a "Juntar" button - if visible, don't dismiss other modals
@@ -120,6 +173,12 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
                   var isVisible = styles.display !== 'none' && styles.visibility !== 'hidden';
 
                   if (isVisible) {
+                    // CRITICAL SAFETY CHECK: Never click dangerous buttons
+                    if (isDangerousElement(element)) {
+                      console.warn('[AutoPopup] BLOCKED: Refusing to click dangerous element (pattern: ' + pattern.name + ')');
+                      continue;
+                    }
+
                     dismissalCount++;
                     console.log('[AutoPopup #' + dismissalCount + '] Dismissing: ' + pattern.name + ' (selector: ' + selector + ')');
                     element.click();

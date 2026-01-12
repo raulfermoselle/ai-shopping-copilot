@@ -21,13 +21,16 @@ import { createSelectorResolver } from '../../../selectors/resolver.js';
 
 /**
  * Parse quantity from Auchan format "x2" → 2
+ * Always returns at least 1 (positive integer required by schema)
  */
 function parseQuantity(text: string): number {
   const match = text.trim().match(/x?(\d+)/i);
   if (!match?.[1]) {
     return 1;
   }
-  return parseInt(match[1], 10);
+  const parsed = parseInt(match[1], 10);
+  // Ensure quantity is always at least 1 (positive)
+  return parsed > 0 ? parsed : 1;
 }
 
 /**
@@ -397,11 +400,27 @@ async function extractProductItems(
       // Calculate total
       const totalPrice = quantity * unitPrice;
 
+      // Convert empty strings to undefined and ensure URLs are absolute
+      // Zod url() validation requires full URLs with protocol
+      let cleanProductUrl: string | undefined = undefined;
+      if (productUrl && productUrl.length > 0) {
+        cleanProductUrl = productUrl.startsWith('http')
+          ? productUrl
+          : `https://www.auchan.pt${productUrl.startsWith('/') ? '' : '/'}${productUrl}`;
+      }
+
+      let cleanImageUrl: string | undefined = undefined;
+      if (imageUrl && imageUrl.length > 0) {
+        cleanImageUrl = imageUrl.startsWith('http')
+          ? imageUrl
+          : `https://www.auchan.pt${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+      }
+
       items.push({
-        productId,
-        name,
-        productUrl: productUrl ?? undefined,
-        imageUrl: imageUrl ?? undefined,
+        productId: productId && productId.length > 0 ? productId : undefined,
+        name: name || 'Unknown Product',
+        productUrl: cleanProductUrl,
+        imageUrl: cleanImageUrl,
         quantity,
         unitPrice,
         totalPrice,
