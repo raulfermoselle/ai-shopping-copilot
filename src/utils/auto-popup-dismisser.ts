@@ -22,24 +22,29 @@ import type { Logger } from './logger.js';
  *
  * IMPORTANT: The reorder modal (with "Juntar"/"Eliminar" buttons) must NOT be dismissed.
  * We need to interact with it to merge orders into the cart.
+ *
+ * NOTE: Selectors must be valid CSS (no Playwright :has-text pseudo-selector).
+ * Text matching is done in JavaScript after element selection.
  */
 const POPUP_PATTERNS = [
   // Cart removal confirmation - "Cancelar" button (HIGHEST PRIORITY - keeps items in cart)
   // Only match if this is NOT the reorder modal (check for absence of Juntar button)
-  { selector: 'button:has-text("Cancelar")', priority: 100, name: 'cart-removal-cancel', skipIfReorderModal: true },
+  { selector: 'button', textMatch: 'Cancelar', priority: 100, name: 'cart-removal-cancel', skipIfReorderModal: true },
 
-  // Subscription popup - "Não" link/button
-  { selector: 'a:has-text("Não"), button:has-text("Não"), [role="button"]:has-text("Não")', priority: 90, name: 'subscription-nao' },
+  // Subscription popup - "Não" link/button (appears after clicking reorder)
+  // CRITICAL: Must use exactMatch: true to avoid matching text on other modals
+  // CRITICAL: Must skipIfReorderModal to avoid interfering with merge/replace modal
+  { selector: 'a, button, [role="button"]', textMatch: 'Não', exactMatch: true, priority: 90, name: 'subscription-nao', skipIfReorderModal: true },
 
-  // Cookie consent
-  { selector: '#onetrust-accept-btn-handler, button:has-text("Aceitar")', priority: 80, name: 'cookie-consent' },
+  // Cookie consent - safe to dismiss anytime
+  { selector: '#onetrust-accept-btn-handler', priority: 80, name: 'cookie-consent' },
 
   // Modal close buttons - SKIP if reorder modal is showing
   // IMPORTANT: Only match specific aria-label patterns, avoid generic class selectors
   { selector: '[aria-label="Close"], [aria-label="Fechar"]', priority: 70, name: 'modal-close', skipIfReorderModal: true },
 
-  // REMOVED: Generic dismiss pattern (.notification-close, .popup-dismiss, [data-dismiss="modal"])
-  // was too risky - could match cart removal buttons or other dangerous elements
+  // REMOVED: promo-banner-close - too risky, could close important modals
+  // REMOVED: Generic dismiss pattern - was too risky
 ];
 
 /**
@@ -125,13 +130,38 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
       }
 
       function isReorderModalVisible() {
-        // The reorder modal has a "Juntar" button - if visible, don't dismiss other modals
-        var juntarButtons = document.querySelectorAll('button');
-        for (var i = 0; i < juntarButtons.length; i++) {
-          if (juntarButtons[i].textContent && juntarButtons[i].textContent.indexOf('Juntar') >= 0) {
-            var styles = window.getComputedStyle(juntarButtons[i]);
-            if (styles.display !== 'none' && styles.visibility !== 'hidden' && juntarButtons[i].offsetParent !== null) {
+        // The reorder modal has two modes:
+        // 1. Merge mode (cart has items): Shows "Juntar" and "Eliminar" buttons
+        // 2. Replace mode (cart empty): Shows "Encomendar de novo" button in a modal
+        //
+        // Check for any of these indicators to detect the reorder modal
+        var buttons = document.querySelectorAll('button');
+        for (var i = 0; i < buttons.length; i++) {
+          var buttonText = buttons[i].textContent || '';
+
+          // Check for merge mode buttons (Juntar or Eliminar)
+          if (buttonText.indexOf('Juntar') >= 0 || buttonText.indexOf('Eliminar') >= 0) {
+            var styles = window.getComputedStyle(buttons[i]);
+            if (styles.display !== 'none' && styles.visibility !== 'hidden' && buttons[i].offsetParent !== null) {
               return true;
+            }
+          }
+
+          // Check for replace mode: "Encomendar de novo" button in a modal context
+          // (must be inside a modal/dialog, not the main page button)
+          if (buttonText.indexOf('Encomendar de novo') >= 0) {
+            var styles = window.getComputedStyle(buttons[i]);
+            if (styles.display !== 'none' && styles.visibility !== 'hidden' && buttons[i].offsetParent !== null) {
+              // Check if this button is inside a modal (look for modal ancestors)
+              var element = buttons[i];
+              while (element && element !== document.body) {
+                var className = element.className || '';
+                var role = element.getAttribute('role') || '';
+                if (typeof className === 'string' && (className.indexOf('modal') >= 0 || role === 'dialog')) {
+                  return true;
+                }
+                element = element.parentElement;
+              }
             }
           }
         }
@@ -168,6 +198,19 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
 
               for (var k = 0; k < elements.length; k++) {
                 var element = elements[k];
+
+                // Text matching: if pattern has textMatch, verify element contains that text
+                if (pattern.textMatch) {
+                  var elementText = (element.textContent || '').trim();
+                  if (pattern.exactMatch) {
+                    // Exact match: text must equal textMatch exactly
+                    if (elementText !== pattern.textMatch) continue;
+                  } else {
+                    // Substring match: text must contain textMatch
+                    if (elementText.indexOf(pattern.textMatch) < 0) continue;
+                  }
+                }
+
                 if (element.offsetParent !== null) {
                   var styles = window.getComputedStyle(element);
                   var isVisible = styles.display !== 'none' && styles.visibility !== 'hidden';
@@ -180,9 +223,11 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
                     }
 
                     dismissalCount++;
-                    console.log('[AutoPopup #' + dismissalCount + '] Dismissing: ' + pattern.name + ' (selector: ' + selector + ')');
+                    console.log('[AutoPopup #' + dismissalCount + '] Dismissing: ' + pattern.name + ' (text: ' + (element.textContent || '').trim().substring(0, 30) + ')');
                     element.click();
                     element.setAttribute('data-popup-dismissed', 'true');
+                    // Schedule cascading check for popups that appear after this one is dismissed
+                    setTimeout(checkAndDismissPopups, 200);
                   }
                 }
               }
@@ -209,7 +254,7 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
         }
 
         if (shouldCheck) {
-          setTimeout(checkAndDismissPopups, 100);
+          setTimeout(checkAndDismissPopups, 50);  // Fast response - 50ms debounce
         }
       });
 

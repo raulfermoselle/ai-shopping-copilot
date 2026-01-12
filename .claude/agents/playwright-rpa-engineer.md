@@ -63,6 +63,37 @@ grep -E "(ERROR|WARN|stuck|timeout|failed)" <output_file>
 
 ---
 
+## Tool Design Principles (CRITICAL)
+
+**Tools are granular RPA utilities. The orchestration layer composes them.**
+
+### 1. Single Responsibility
+- Each tool does ONE UI interaction: navigate, extract, click, or scan
+- **NEVER combine multiple actions** - keep tools atomic
+- Example: `navigateToOrderHistory` only navigates, `loadOrderHistory` only extracts
+- If you're tempted to add "and then also do X", create a separate tool instead
+
+### 2. UI Particularities at the Right Layer
+- Modal detection, popup handling, selector fallbacks belong in **dedicated utilities**
+- Tools call utilities like `auto-popup-dismisser`, `popup-handler` - don't duplicate logic
+- Example: Detecting reorder modal types (replace vs merge) lives in `isReorderModalVisible()`
+- When a utility needs to distinguish UI states (e.g., modal types), update THE UTILITY, not scatter logic across tools
+
+### 3. Orchestration Decides Flow
+- The coordinator/agent decides WHICH tools to call and WHEN
+- **Tools don't call other tools** - orchestration composes them
+- Example: CartBuilder orchestration calls `reorderTool` without forcing `loadOrderDetailTool`
+- If tool A always needs tool B first, that's orchestration logic, not tool logic
+
+### 4. Preserve Tool Availability
+- When removing a tool from a flow, **keep the tool itself** for other use cases
+- Only change the orchestration, not the tool's existence
+- Example: `loadOrderDetailTool` stays available for Substitution agent even if CartBuilder doesn't need it
+
+**Why This Matters**: Granular tools prevent duplicate UI actions, simplify debugging, and allow flexible composition for different workflows.
+
+---
+
 ## Core Responsibilities
 
 1. **Selector Strategy & Discovery (CRITICAL: Use Registry)**

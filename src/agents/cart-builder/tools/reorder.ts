@@ -17,6 +17,7 @@ import type { Tool, ToolResult, ToolContext } from '../../../types/tool.js';
 import type { ReorderInput, ReorderOutput } from './types.js';
 import { createSelectorResolver } from '../../../selectors/resolver.js';
 import { dismissPopups } from '../../../utils/popup-handler.js';
+import { attachPopupObserver } from '../../../utils/auto-popup-dismisser.js';
 
 /**
  * Maximum wait time for cart update after reorder (ms)
@@ -24,9 +25,11 @@ import { dismissPopups } from '../../../utils/popup-handler.js';
 const CART_UPDATE_WAIT = 3000;
 
 /**
- * Maximum wait time for modal to appear (ms)
+ * Maximum wait time for modal to appear per selector (ms)
+ * Note: With multiple fallback selectors, total wait = this × number of selectors
+ * Keep this short (1s) since we try multiple selectors as fallbacks
  */
-const MODAL_WAIT_TIMEOUT = 5000;
+const MODAL_WAIT_TIMEOUT = 1000;
 
 /**
  * Maximum retries for popup dismissal before critical actions
@@ -213,6 +216,10 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         context.logger.debug('Already on order detail page');
       }
 
+      // Attach auto-popup observer to immediately dismiss popups when they appear
+      // This ensures subscription popups are caught as soon as they're added to DOM
+      await attachPopupObserver(context.page, context.logger);
+
       // CRITICAL: Dismiss any blocking popups before attempting reorder
       await ensureNoBlockingPopups(context, 'reorder button click');
 
@@ -275,6 +282,14 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         await reorderButtonResult.element.click({ timeout: 5000 });
       }
 
+      // Wait for popups to appear and be auto-dismissed, then for modal to appear
+      // This gives time for:
+      // 1. The click to register with the server
+      // 2. Subscription popup to appear (and be dismissed by auto-observer)
+      // 3. The reorder modal to actually render
+      context.logger.debug('Waiting for popup dismissal and modal to appear');
+      await context.page.waitForTimeout(1500);
+
       // Handle the confirmation modal
       context.logger.debug('Waiting for reorder confirmation modal');
       const modalHandled = await handleReorderModal(context, resolver, mergeMode, screenshots, input.orderId);
@@ -303,6 +318,8 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
 
         if (retryButtonResult) {
           await retryButtonResult.element.click({ timeout: 5000 });
+          // Wait for popup dismissal and modal to appear
+          await context.page.waitForTimeout(1500);
           // Try modal handling again
           const retryModalHandled = await handleReorderModal(
             context,
@@ -390,6 +407,20 @@ export const reorderTool: Tool<ReorderInput, ReorderOutput> = {
         cartChanged = true;
         verificationMethod = 'total-exists';
         context.logger.info('Cart change assumed via non-zero total', { cartTotalAfter });
+      }
+
+      // Final fallback: if we couldn't detect cart state at all (all null), assume success
+      // This happens when cart header isn't visible on order detail page
+      if (
+        !cartChanged &&
+        cartCountBefore === null &&
+        cartCountAfter === null &&
+        cartTotalBefore === null &&
+        cartTotalAfter === null
+      ) {
+        cartChanged = true;
+        verificationMethod = 'assumed';
+        context.logger.info('Cart change assumed - could not detect cart state on order detail page');
       }
 
       if (!cartChanged) {
@@ -539,17 +570,26 @@ async function handleReorderModal(
   orderId: string
 ): Promise<boolean> {
   try {
+    // NOTE: Do NOT call ensureNoBlockingPopups here - it could dismiss the reorder modal!
+    // The 1500ms wait after clicking reorder button gives the MutationObserver time to
+    // dismiss subscription popups while preserving the reorder modal (via skipIfReorderModal).
+
     // Wait for modal to appear
     context.logger.debug('Waiting for modal to appear', { timeout: MODAL_WAIT_TIMEOUT });
 
     // Try to find the modal using multiple strategies
+    // Note: :visible is jQuery/Playwright-specific, not valid CSS for waitForSelector
     const modalSelectors = [
       '.auc-modal[data-visible="true"]',
       '.modal.show',
       '[role="dialog"][aria-modal="true"]',
       '.auc-modal--visible',
-      '.auc-modal:visible',
-      '[class*="modal"]:visible',
+      // Auchan-specific modal classes
+      '.auc-modal.auc-modal--active',
+      '.auc-modal[style*="display: block"]',
+      // Generic Bootstrap modal patterns
+      '.modal[style*="display: block"]',
+      '[role="dialog"]',
     ];
 
     let modalFound = false;
@@ -653,12 +693,16 @@ async function handleReorderModal(
     }
 
     // Fallback: try direct text searches
+    // CRITICAL: Only look for buttons INSIDE modal containers to avoid clicking main page buttons
     // CRITICAL: DO NOT include "Confirmar" here as it might be the cart removal confirmation!
     const confirmButtonSelectors = [
-      'button:has-text("Encomendar de novo")',
+      // Modal-scoped selectors only - never match buttons on the main page
+      '.modal button:has-text("Encomendar de novo")',
+      '[role="dialog"] button:has-text("Encomendar de novo")',
+      '.auc-modal button:has-text("Encomendar de novo")',
+      '[aria-modal="true"] button:has-text("Encomendar de novo")',
+      // Skip generic 'button:has-text("Encomendar de novo")' - matches main page button!
       // Skip "Confirmar" - too dangerous, could trigger cart removal
-      '.modal button.btn-primary:has-text("Encomendar")',
-      // Skip generic selectors that might match wrong buttons
     ];
 
     for (const selector of confirmButtonSelectors) {

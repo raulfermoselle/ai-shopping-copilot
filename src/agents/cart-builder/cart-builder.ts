@@ -31,10 +31,10 @@ import type {
 import { CartBuilderConfigSchema } from './types.js';
 
 // Import CartBuilder tools
+// Note: loadOrderDetailTool is available in tools/index.js for components needing item-level data
 import {
   navigateToOrderHistoryTool,
   loadOrderHistoryTool,
-  loadOrderDetailTool,
   reorderTool,
   scanCartTool,
 } from './tools/index.js';
@@ -199,7 +199,7 @@ export class CartBuilder {
         toolContext,
         selectedOrders
       );
-      logs.push(`Processed ${orderDetails.length} orders: ${successCount} succeeded, ${failureCount} failed`);
+      logs.push(`Reordered ${successCount}/${selectedOrders.length} orders (${failureCount} failed)`);
 
       // CRITICAL: Verify at least one order was successfully reordered
       if (successCount === 0 && selectedOrders.length > 0) {
@@ -404,25 +404,8 @@ export class CartBuilder {
         mergeMode,
       });
 
-      // Load order detail (optional - for reporting)
-      const detailResult = await loadOrderDetailTool.execute(
-        {
-          orderId: order.orderId,
-          detailUrl: order.detailUrl,
-          expandAllProducts: true,
-        },
-        toolContext
-      );
-
-      if (detailResult.success && detailResult.data) {
-        orderDetails.push(detailResult.data.order);
-      } else {
-        toolContext.logger.warn('Failed to load order detail (continuing with reorder)', {
-          orderId: order.orderId,
-          error: detailResult.error?.message,
-        });
-        // Don't fail the whole process - detail loading is for reporting only
-      }
+      // Note: loadOrderDetailTool is available in toolkit for item-level analysis
+      // but not needed during reorder flow - reorderTool handles navigation
 
       // Click reorder button with appropriate merge mode
       const reorderResult = await reorderTool.execute(
@@ -460,7 +443,6 @@ export class CartBuilder {
       totalOrders: ordersToProcess.length,
       successCount,
       failureCount,
-      orderDetailsExtracted: orderDetails.length,
     });
 
     return { orderDetails, successCount, failureCount };

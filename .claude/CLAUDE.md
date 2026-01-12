@@ -94,6 +94,32 @@ Playwright-based browser automation:
 
 **Safety**: Agent NEVER places orders - stops at ready-to-review cart
 
+### Tool Design Principles (CRITICAL)
+
+Tools are **granular RPA utilities** that the orchestration layer composes. Follow these principles:
+
+**1. Single Responsibility**
+- Each tool does ONE UI interaction: navigate, extract, click, or scan
+- Never combine multiple actions - keep tools atomic
+- Example: `navigateToOrderHistory` only navigates, `loadOrderHistory` only extracts
+
+**2. UI Particularities at the Right Layer**
+- Modal detection, popup handling, selector fallbacks belong in dedicated utilities
+- Tools call these utilities (`auto-popup-dismisser`, `popup-handler`) - don't duplicate logic
+- Example: Detecting reorder modal types (replace vs merge) lives in `isReorderModalVisible()`
+
+**3. Orchestration Decides Flow**
+- The coordinator/agent decides WHICH tools to call and WHEN
+- Tools don't call other tools - orchestration composes them
+- Example: CartBuilder orchestration calls `reorderTool` without forcing `loadOrderDetailTool`
+
+**4. Preserve Tool Availability**
+- When removing a tool from a flow, keep the tool itself for other use cases
+- Only change the orchestration, not the tool's existence
+- Example: `loadOrderDetailTool` stays available for Substitution agent even if CartBuilder doesn't use it
+
+**Why This Matters**: Granular tools prevent duplicate UI actions, simplify debugging, and allow flexible composition for different workflows.
+
 ---
 
 ## Selector Registry (CRITICAL)
@@ -265,6 +291,6 @@ npm run dev:browser  # Interactive browser session
 
 ---
 
-**Last Updated:** 2026-01-11
+**Last Updated:** 2026-01-12
 **Project:** AI Shopping Copilot (AISC)
 **Current Sprint:** Sprint-CB-R-001 (In Progress)
