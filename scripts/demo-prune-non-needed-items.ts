@@ -25,11 +25,13 @@ import * as path from 'path';
 import { chromium } from 'playwright';
 import { createLogger } from '../dist/utils/logger.js';
 import { attachPopupObserver, detachPopupObserver } from '../dist/utils/auto-popup-dismisser.js';
-import { loginTool } from '../dist/agents/cart-builder/tools/login.js';
-import { navigateToOrderHistoryTool } from '../dist/agents/cart-builder/tools/navigate-to-order-history.js';
-import { loadOrderHistoryTool } from '../dist/agents/cart-builder/tools/load-order-history.js';
-import { loadOrderDetailTool } from '../dist/agents/cart-builder/tools/load-order-detail.js';
-import { scanCartTool } from '../dist/agents/cart-builder/tools/scan-cart.js';
+import { LoginTool } from '../dist/tools/login.js';
+import {
+  navigateToOrderHistoryTool,
+  loadOrderHistoryTool,
+  loadOrderDetailTool,
+  scanCartTool,
+} from '../dist/agents/cart-builder/tools/index.js';
 import { createStockPruner } from '../dist/agents/stock-pruner/stock-pruner.js';
 import type { AgentContext, WorkingMemory } from '../dist/types/agent.js';
 import type { ToolContext } from '../dist/types/tool.js';
@@ -53,6 +55,9 @@ const colors = {
 const HOUSEHOLD_ID = 'household-demo';
 const HISTORY_FILE = `data/memory/${HOUSEHOLD_ID}/purchase-history.json`;
 const MAX_ORDERS_TO_SYNC = 10;
+
+// Create login tool instance
+const loginTool = new LoginTool();
 
 interface StoredPurchaseHistory {
   records: PurchaseRecord[];
@@ -452,7 +457,7 @@ async function main(): Promise<void> {
       throw new Error(`Failed to scan cart: ${cartResult.error?.message}`);
     }
 
-    const cart = cartResult.data.cart;
+    const cart = cartResult.data.snapshot;
     console.log(`${colors.green}✓ Found ${cart.itemCount} items in cart (€${cart.totalPrice.toFixed(2)})${colors.reset}`);
 
     if (cart.itemCount === 0) {
