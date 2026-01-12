@@ -43,6 +43,9 @@ credentials.json
 # Runtime session data
 /sessions/
 
+# Memory data (user-specific purchase history)
+/data/memory/
+
 # Screenshots (debugging artifacts)
 /screenshots/*.png
 
