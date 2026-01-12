@@ -120,7 +120,7 @@ async function getCartCount(context: ToolContext): Promise<number | null> {
         if (text) {
           // Extract just the number from text (handle "1 item" or just "1")
           const match = text.trim().match(/^(\d+)/);
-          if (match && match[1]) {
+          if (match?.[1]) {
             const count = parseInt(match[1], 10);
             context.logger.debug('Got cart count from text', { count, selector });
             return count;

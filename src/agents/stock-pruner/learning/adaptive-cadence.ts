@@ -228,14 +228,14 @@ export function getSeasonalFactor(
     (p) => p.category === category
   );
 
-  if (householdPattern && householdPattern.monthlyFactors[month] !== undefined) {
-    return householdPattern.monthlyFactors[month]!;
+  if (householdPattern?.monthlyFactors[month] !== undefined) {
+    return householdPattern.monthlyFactors[month];
   }
 
   // Fall back to default seasonal factors
   const defaultFactors = DEFAULT_SEASONAL_FACTORS[category];
-  if (defaultFactors && defaultFactors[month] !== undefined) {
-    return defaultFactors[month]!;
+  if (defaultFactors?.[month] !== undefined) {
+    return defaultFactors[month];
   }
 
   return 1.0;

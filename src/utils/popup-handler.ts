@@ -142,8 +142,8 @@ export async function dismissPopups(
 
   // Sort strategies by priority (highest first)
   const sortedStrategies = [...POPUP_DISMISS_STRATEGIES].sort((a, b) => {
-    const priorityA = 'priority' in a ? (a.priority as number) : 0;
-    const priorityB = 'priority' in b ? (b.priority as number) : 0;
+    const priorityA = 'priority' in a ? (a.priority) : 0;
+    const priorityB = 'priority' in b ? (b.priority) : 0;
     return priorityB - priorityA;
   });
 
