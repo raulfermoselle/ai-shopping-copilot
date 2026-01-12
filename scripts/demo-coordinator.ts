@@ -227,7 +227,7 @@ async function main(): Promise<void> {
     // Setup stuck detection
     let lastProgressTime = Date.now();
     let stuckDetectionInterval: NodeJS.Timeout | null = null;
-    const STUCK_TIMEOUT_MS = 600000; // 10 minutes - disabled effectively to let flow complete
+    const STUCK_TIMEOUT_MS = 30000; // 30 seconds - agent should detect stuck state quickly
 
     const updateProgress = (stepName: string) => {
       lastProgressTime = Date.now();
@@ -237,7 +237,7 @@ async function main(): Promise<void> {
     stuckDetectionInterval = setInterval(async () => {
       const timeSinceProgress = Date.now() - lastProgressTime;
       if (timeSinceProgress > STUCK_TIMEOUT_MS) {
-        logger.error('STUCK DETECTION: No progress for 45+ seconds', {
+        logger.error('STUCK DETECTION: No progress for 30+ seconds', {
           timeSinceProgress,
           lastProgressTime: new Date(lastProgressTime).toISOString(),
           currentUrl: page.url(),
