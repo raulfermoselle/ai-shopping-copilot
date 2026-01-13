@@ -84,6 +84,90 @@ External communication
 
 ---
 
+## LLM Integration (Anthropic Claude)
+
+The project integrates Claude for enhanced agent decision-making. The LLM **enhances** but doesn't replace heuristics.
+
+### Architecture
+
+```
+src/llm/
+  client.ts           # Anthropic SDK wrapper with tool-use
+  types.ts            # LLM-specific types
+  schemas.ts          # Zod schemas for structured outputs
+  tools.ts            # Tool definitions for Claude
+  token-manager.ts    # Rate limiting, retry logic
+  prompts/
+    system.ts         # Base system prompts
+    stock-pruner.ts   # StockPruner-specific prompts
+  index.ts            # Module exports
+```
+
+### Key Principles
+
+**1. Agentic, Not Chatbot**
+- Uses tool-use patterns (ReAct loop), NOT conversational
+- Structured outputs with Zod schema validation
+- Designed for decision-making, not human interaction
+
+**2. Graceful Degradation**
+- If LLM unavailable → fall back to heuristics
+- If rate limited → queue with exponential backoff
+- Never blocks user flow due to LLM failure
+
+**3. LLM Enhances Heuristics**
+```
+Cart Items
+    ↓
+[1] Heuristics run FIRST (fast, free)
+    ↓
+[2] Filter: confidence < 0.6 OR high-consequence items
+    ↓
+[3] LLM Enhancement (only for filtered items)
+    ↓
+[4] Merge: LLM insights + heuristic decisions
+    ↓
+Final decisions with rich explanations
+```
+
+### Usage Example
+
+```typescript
+import { createLLMEnhancer, processCartItems } from './agents/stock-pruner';
+
+// Run heuristics first
+const heuristicDecisions = processCartItems(items, history, config);
+
+// Enhance with LLM (optional)
+const enhancer = createLLMEnhancer({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  uncertaintyThreshold: 0.6,
+  highConsequenceCategories: ['baby-care', 'pet-supplies'],
+});
+
+const result = await enhancer.enhance(heuristicDecisions);
+// result.decisions now have llmReasoning, safetyFlags, etc.
+```
+
+### Configuration
+
+Set in `.env`:
+```bash
+ANTHROPIC_API_KEY=your-api-key-here
+# Optional:
+# LLM_MODEL=claude-sonnet-4-20250514
+# LLM_MAX_TOKENS=2048
+# LLM_TEMPERATURE=0.3
+```
+
+### High-Consequence Categories
+
+Items in these categories always get LLM review regardless of heuristic confidence:
+- `baby-care` - Baby formula, diapers, wipes
+- `pet-supplies` - Pet food, medication
+
+---
+
 ## Tool Layer
 
 Playwright-based browser automation:
@@ -291,6 +375,6 @@ npm run dev:browser  # Interactive browser session
 
 ---
 
-**Last Updated:** 2026-01-12
+**Last Updated:** 2026-01-13
 **Project:** AI Shopping Copilot (AISC)
-**Current Sprint:** Sprint-CB-R-001 (In Progress)
+**Current Sprint:** LLM Integration Complete

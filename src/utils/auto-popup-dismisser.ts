@@ -31,6 +31,11 @@ const POPUP_PATTERNS = [
   // Only match if this is NOT the reorder modal (check for absence of Juntar button)
   { selector: 'button', textMatch: 'Cancelar', priority: 100, name: 'cart-removal-cancel', skipIfReorderModal: true },
 
+  // Notification subscription popup - "Não" button next to "Subscrever"
+  // This popup asks "Subscreva as nossas notificações..." with Não/Subscrever buttons
+  // Uses substring match since button text might have whitespace
+  { selector: 'button, a, span[role="button"], div[role="button"]', textMatch: 'Não', priority: 95, name: 'notification-subscription-nao', skipIfReorderModal: true },
+
   // Subscription popup - "Não" link/button (appears after clicking reorder)
   // CRITICAL: Must use exactMatch: true to avoid matching text on other modals
   // CRITICAL: Must skipIfReorderModal to avoid interfering with merge/replace modal
@@ -268,9 +273,16 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
       window.__popupObserver = observer;
       window.__popupDismissalCount = 0;
 
+      // PERIODIC SCANNER: Fallback in case MutationObserver misses popups
+      // Runs every 500ms to catch any popups that appeared without triggering mutations
+      var periodicScanInterval = setInterval(function() {
+        checkAndDismissPopups();
+      }, 500);
+      window.__popupPeriodicScan = periodicScanInterval;
+
       checkAndDismissPopups();
 
-      console.log('[AutoPopup] Observer attached and monitoring');
+      console.log('[AutoPopup] Observer attached with periodic scanner (500ms fallback)');
     })(${JSON.stringify(patternsJSON)})
   `);
 
@@ -285,6 +297,12 @@ export async function attachPopupObserver(page: Page, logger: Logger): Promise<v
 export async function detachPopupObserver(page: Page): Promise<void> {
   await page.evaluate(`
     (function() {
+      // Clear periodic scanner
+      if (window.__popupPeriodicScan) {
+        clearInterval(window.__popupPeriodicScan);
+        delete window.__popupPeriodicScan;
+      }
+      // Disconnect MutationObserver
       if (window.__popupObserver) {
         window.__popupObserver.disconnect();
         delete window.__popupObserver;

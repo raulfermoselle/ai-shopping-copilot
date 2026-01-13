@@ -21,15 +21,27 @@ import { createSelectorResolver } from '../../../selectors/resolver.js';
 
 /**
  * Parse quantity from Auchan format "x2" → 2
- * Always returns at least 1 (positive integer required by schema)
+ *
+ * Returns:
+ * - 0 for "x0" (unavailable/refunded items)
+ * - 1+ for normal quantities
+ * - 1 as fallback for unparseable text
  */
 function parseQuantity(text: string): number {
-  const match = text.trim().match(/x?(\d+)/i);
-  if (!match?.[1]) {
-    return 1;
+  const trimmed = text.trim().toLowerCase();
+
+  // Handle "x0" explicitly - these are unavailable/refunded items
+  if (trimmed === 'x0') {
+    return 0;
   }
+
+  const match = trimmed.match(/x?(\d+)/i);
+  if (!match?.[1]) {
+    return 1; // Fallback for unparseable text
+  }
+
   const parsed = parseInt(match[1], 10);
-  // Ensure quantity is always at least 1 (positive)
+  // For any other case, ensure at least 1 (protects against edge cases)
   return parsed > 0 ? parsed : 1;
 }
 
@@ -388,6 +400,13 @@ async function extractProductItems(
         ? await productQuantityElement.textContent()
         : null;
       const quantity = quantityText ? parseQuantity(quantityText) : 1;
+
+      // Skip unavailable/refunded items (x0 quantity)
+      // These items appear on order pages but weren't actually delivered
+      if (quantity === 0) {
+        context.logger.debug('Skipping unavailable item (x0)', { name });
+        continue;
+      }
 
       // Price
       const productPriceSelector = resolver.resolve('order-detail', 'productPrice');

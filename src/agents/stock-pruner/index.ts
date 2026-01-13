@@ -166,3 +166,54 @@ export {
   getProductKey,
   type ProductKey,
 } from './learning/index.js';
+
+// =============================================================================
+// LLM Enhancement Module
+// =============================================================================
+
+// LLM-powered decision enhancement
+export {
+  // Main enhancer class
+  LLMEnhancer,
+  createLLMEnhancer,
+  enhanceWithLLM,
+
+  // Configuration
+  DEFAULT_LLM_ENHANCER_CONFIG,
+  type LLMEnhancerConfig,
+
+  // Enhanced types
+  type EnhancedPruneDecision,
+  type LLMEnhancementResult,
+} from './llm-enhancer.js';
+
+// =============================================================================
+// Product Analytics Module
+// =============================================================================
+
+// Analytics engine for rich statistical analysis
+export {
+  // Engine
+  ProductAnalyticsEngine,
+  createAnalyticsEngine,
+  normalizeProductName,
+
+  // Prompt building
+  buildAnalyticsSystemPrompt,
+  buildRichBatchPrompt,
+  prepareItemsForPrompt,
+} from './analytics/index.js';
+
+export type {
+  // Types
+  ProductAnalytics,
+  PurchaseRecord as AnalyticsPurchaseRecord,
+  IntervalStats,
+  QuantityStats,
+  TrendAnalysis,
+  SeasonalityAnalysis,
+  CoPurchaseRelation,
+  DetectedBundle,
+  AnalyticsSummary,
+  AnalyticsEngineConfig,
+} from './analytics/index.js';
