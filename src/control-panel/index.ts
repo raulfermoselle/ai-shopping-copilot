@@ -35,6 +35,15 @@ export {
 // Phase 3: UI Components
 export * from './components/index.js';
 
+// CLI Renderer
+export {
+  CLIRenderer,
+  createCLIRenderer,
+  renderProgressBar,
+  renderReviewPack,
+  renderProgress,
+} from './cli-renderer.js';
+
 // Re-export Coordinator types used by Control Panel
 export type {
   ReviewPack as CoordinatorReviewPack,

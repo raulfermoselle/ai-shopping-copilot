@@ -102,6 +102,66 @@ async function addItemsToCart(page: Page): Promise<boolean> {
 }
 
 /**
+ * Remove unavailable items from cart
+ */
+async function removeUnavailableItems(page: Page): Promise<boolean> {
+  try {
+    logger.info('Checking for unavailable items in cart');
+
+    // Check if there are unavailable items
+    const unavailableItems = await page.locator('.auc-unavailable-text:has-text("Produto indisponível")').count();
+
+    if (unavailableItems > 0) {
+      logger.info(`Found ${unavailableItems} unavailable items. Removing them.`);
+
+      // Look for remove unavailable products button
+      const removeBtn = page.locator('.auc-js-cart-remove-unavailable-products, button:has-text("Remover")').first();
+      const removeVisible = await removeBtn.isVisible({ timeout: 3000 }).catch(() => false);
+
+      if (removeVisible) {
+        logger.info('Clicking remove unavailable products button');
+        await removeBtn.click();
+        await page.waitForTimeout(2000);
+
+        // Confirm in modal if needed
+        const confirmBtn = page.locator('button:has-text("Confirmar"), button:has-text("Sim")').first();
+        const confirmVisible = await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false);
+        if (confirmVisible) {
+          await confirmBtn.click();
+          await page.waitForTimeout(2000);
+        }
+
+        logger.info('Unavailable items removed');
+        return true;
+      }
+
+      // Alternative: remove items one by one
+      logger.info('Attempting to remove unavailable items individually');
+      const removeButtons = page.locator('.auc-unavailable-image').locator('xpath=ancestor::div[contains(@class,"product-info")]').locator('button.remove-product, .remove-btn');
+      const count = await removeButtons.count();
+      logger.info(`Found ${count} remove buttons for unavailable items`);
+
+      for (let i = 0; i < Math.min(count, 10); i++) {
+        try {
+          await removeButtons.nth(i).click({ timeout: 2000 });
+          await page.waitForTimeout(1000);
+        } catch (err) {
+          logger.warn(`Failed to remove item ${i}`, { error: err });
+        }
+      }
+
+      return true;
+    }
+
+    logger.info('No unavailable items found');
+    return false;
+  } catch (error) {
+    logger.error('Failed to remove unavailable items', { error });
+    return false;
+  }
+}
+
+/**
  * Try to proceed to checkout
  */
 async function proceedToCheckout(page: Page): Promise<boolean> {
@@ -110,6 +170,7 @@ async function proceedToCheckout(page: Page): Promise<boolean> {
 
     // Try multiple checkout button selectors
     const checkoutSelectors = [
+      '.checkout-btn.auc-button__rounded--primary',
       '.auc-cart__checkout-btn',
       'button:has-text("Finalizar compra")',
       'button:has-text("Finalizar")',
@@ -120,19 +181,34 @@ async function proceedToCheckout(page: Page): Promise<boolean> {
     for (const selector of checkoutSelectors) {
       const btn = page.locator(selector).first();
       const visible = await btn.isVisible({ timeout: 2000 }).catch(() => false);
-      const enabled = await btn.isEnabled().catch(() => false);
 
       if (visible) {
-        logger.info(`Found checkout button: ${selector}`, { enabled });
+        const enabled = await btn.isEnabled().catch(() => false);
+        const hasDisabledClass = await btn.evaluate(el => el.classList.contains('disabled')).catch(() => false);
 
-        if (!enabled) {
-          logger.warn('Checkout button is DISABLED (minimum order not met)');
-          return false;
+        logger.info(`Found checkout button: ${selector}`, { enabled, hasDisabledClass });
+
+        if (!enabled || hasDisabledClass) {
+          logger.warn('Checkout button is DISABLED. This may trigger unavailable products modal.');
         }
 
-        logger.info('Clicking checkout button');
-        await btn.click();
-        await page.waitForTimeout(3000);
+        logger.info('Clicking checkout button (may trigger modal)');
+        // Click even if disabled - it might trigger a modal
+        await btn.evaluate((el: HTMLElement) => el.click());
+        await page.waitForTimeout(2000);
+
+        // Check for unavailable products modal
+        const modal = page.locator('#confirm-unavailable-products-removal, .auc-modal:has-text("produtos indisponíveis")');
+        const modalVisible = await modal.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (modalVisible) {
+          logger.info('Unavailable products modal appeared. Clicking Confirmar to remove and proceed.');
+          const confirmBtn = page.locator('.auc-js-cart-remove-unavailable-products, button:has-text("Confirmar")').first();
+          await confirmBtn.click();
+          await page.waitForTimeout(3000);
+        }
+
+        await page.waitForTimeout(1000);
 
         // Wait for navigation
         await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => null);
