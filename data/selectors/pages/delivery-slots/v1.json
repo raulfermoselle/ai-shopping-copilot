@@ -1,0 +1,263 @@
+{
+  "schemaVersion": "1.0.0",
+  "page": "delivery-slots",
+  "version": 2,
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/(escolher-horario-entrega|checkout|entrega|delivery)",
+  "lastValidated": "2026-01-14T05:53:25Z",
+  "notes": "VERIFIED: Delivery slot selection page in checkout flow. Shows available delivery time slots with dates, times, prices. Uses tab navigation: delivery type > day > time slots.",
+  "selectors": {
+    "pageContainer": {
+      "name": "Slot picker main container",
+      "primary": ".auc-book-slot__container",
+      "fallbacks": [
+        "[data-slots-url*='Delivery-Slots']",
+        ".auc-card.auc-book-slot__container"
+      ],
+      "score": 90,
+      "reason": "BEM class verified via live research",
+      "verified": true,
+      "notes": "Root container for delivery slot selection UI. Has data-slots-url attribute."
+    },
+    "deliveryTypeTabs": {
+      "name": "Delivery type tabs (Home vs Store)",
+      "primary": ".auc-book-slot__main-tabs",
+      "fallbacks": [
+        ".auc-book-slot__tabs[role='tablist']:first-of-type",
+        "ul.nav.auc-book-slot__tabs"
+      ],
+      "score": 85,
+      "reason": "BEM class verified",
+      "verified": true,
+      "notes": "Contains 'Entrega em Casa' and 'Recolha na Loja' options"
+    },
+    "homeDeliveryTab": {
+      "name": "Home delivery tab panel",
+      "primary": "#shipment-me",
+      "fallbacks": [
+        "[data-shipment-id='me']",
+        ".tab-pane:has-text('Entrega em Casa')"
+      ],
+      "score": 80,
+      "reason": "ID selector verified",
+      "verified": true,
+      "notes": "Tab panel for home delivery options"
+    },
+    "dayTabsContainer": {
+      "name": "Container for day tabs",
+      "primary": ".auc-book-slot__week-days-tabs",
+      "fallbacks": [
+        "ul.nav[role='tablist']:has(.nav-link-tab)",
+        ".auc-book-slot__tabs:has([data-date])"
+      ],
+      "score": 90,
+      "reason": "Specific BEM class verified",
+      "verified": true,
+      "notes": "Contains day tabs for date selection"
+    },
+    "dayTab": {
+      "name": "Individual day tab",
+      "primary": ".nav-link-tab.nav-link",
+      "fallbacks": [
+        "a[data-toggle='pill'][href*='week-day']",
+        ".auc-book-slot__week-days-tabs a.nav-link"
+      ],
+      "score": 85,
+      "reason": "Bootstrap nav pattern verified",
+      "verified": true,
+      "notes": "Each selectable day. Contains data-date via child element.",
+      "dataAttributes": ["data-day-has-limited-availability"]
+    },
+    "dayTabActive": {
+      "name": "Currently selected day tab",
+      "primary": ".nav-link-tab.nav-link.active",
+      "fallbacks": [
+        "a.nav-link[aria-selected='true']"
+      ],
+      "score": 90,
+      "reason": "Bootstrap active class pattern verified",
+      "verified": true,
+      "notes": "The currently selected day"
+    },
+    "dayTabDate": {
+      "name": "Day date element",
+      "primary": ".auc-run-day-month[data-date]",
+      "fallbacks": [
+        ".auc-book-slot--week-day[data-date]"
+      ],
+      "score": 90,
+      "reason": "Data attribute pattern verified",
+      "verified": true,
+      "notes": "Contains data-date attribute with ISO date (e.g., 2026-01-14)",
+      "dataAttributes": ["data-date", "data-locale"]
+    },
+    "timeSlotsContainer": {
+      "name": "Container for time slots",
+      "primary": ".auc-book-slot__slots",
+      "fallbacks": [
+        ".auc-js-book-slot",
+        ".h5.auc-book-slot__slots",
+        "[data-book-slot-url]"
+      ],
+      "score": 90,
+      "reason": "BEM class verified",
+      "verified": true,
+      "notes": "Contains all time slots for selected date. Has data-book-slot-url for API."
+    },
+    "timeSlot": {
+      "name": "Individual time slot",
+      "primary": ".auc-book-slot__slot",
+      "fallbacks": [
+        "[data-time][data-price]"
+      ],
+      "score": 95,
+      "reason": "BEM class with rich data attributes verified",
+      "verified": true,
+      "notes": "Each time window (e.g., 12:30-14:30). Rich data attributes.",
+      "dataAttributes": [
+        "data-time",
+        "data-price",
+        "data-is-free",
+        "data-express",
+        "data-slot-store-id",
+        "data-book-slot-url",
+        "data-has-slots-to-book",
+        "data-is-after-cutoff"
+      ]
+    },
+    "slotTime": {
+      "name": "Time window text",
+      "primary": ".auc-slot__time",
+      "fallbacks": [
+        ".auc-book-slot__slot span:first-child"
+      ],
+      "score": 85,
+      "reason": "BEM class verified",
+      "verified": true,
+      "notes": "Displays time window text (e.g., '12:30 - 14:30')"
+    },
+    "slotPrice": {
+      "name": "Slot price/fee text",
+      "primary": ".auc-slot__desc",
+      "fallbacks": [
+        ".auc-book-slot__slot span:has-text('€')"
+      ],
+      "score": 85,
+      "reason": "BEM class verified",
+      "verified": true,
+      "notes": "Delivery fee text (e.g., '+ 5,99 €'). Also available in data-price attribute."
+    },
+    "cartSummary": {
+      "name": "Cart summary section",
+      "primary": ".auc-book-slot__price-and-products",
+      "fallbacks": [
+        ".auc-book-slot__thumbnails"
+      ],
+      "score": 80,
+      "reason": "BEM class verified",
+      "verified": true,
+      "notes": "Shows cart total and product thumbnails"
+    },
+    "addressSection": {
+      "name": "Shipping address section",
+      "primary": ".auc-book-slot__shipping-address",
+      "fallbacks": [
+        "form.auc-book-slot__shipping-address",
+        ".auc-book-slot__newedit-address"
+      ],
+      "score": 80,
+      "reason": "BEM class verified",
+      "verified": true,
+      "notes": "Shows/edits delivery address"
+    },
+    "warningSymbol": {
+      "name": "Day warning indicator",
+      "primary": ".warning-symbol",
+      "fallbacks": [
+        "[data-warning-text]"
+      ],
+      "score": 75,
+      "reason": "Class verified",
+      "verified": true,
+      "notes": "Indicates day has unavailable products. data-warning-text contains message.",
+      "dataAttributes": ["data-warning-text", "data-warning-symbol"]
+    },
+    "confirmButton": {
+      "name": "Confirm slot selection button",
+      "primary": "button:has-text('Confirmar')",
+      "fallbacks": [
+        ".auc-button__rounded--primary:has-text('Confirmar')",
+        "button[type='submit']:has-text('Confirmar')"
+      ],
+      "score": 75,
+      "reason": "Text selector verified",
+      "verified": true,
+      "notes": "SAFETY WARNING: Do NOT click in automation - proceeds to payment!",
+      "safety": "NEVER_CLICK_IN_AUTOMATION"
+    },
+    "backButton": {
+      "name": "Back to cart button",
+      "primary": "a[href*='carrinho']",
+      "fallbacks": [
+        ".header-back",
+        "button:has-text('Voltar')"
+      ],
+      "score": 70,
+      "reason": "href pattern verified",
+      "verified": true,
+      "notes": "Returns to cart page"
+    }
+  },
+  "navigation": {
+    "selectDay": {
+      "description": "Select a delivery day",
+      "action": "click",
+      "selector": "dayTab",
+      "waitFor": "domcontentloaded",
+      "expectedResult": "dayTabActive class applied, time slots update"
+    },
+    "selectSlot": {
+      "description": "Select a delivery time slot",
+      "action": "click",
+      "selector": "timeSlot",
+      "waitFor": "domcontentloaded",
+      "expectedResult": "Slot highlighted/selected"
+    },
+    "goBack": {
+      "description": "Return to cart without selecting",
+      "action": "click",
+      "selector": "backButton",
+      "expectedUrl": "^https://(www\\.)?auchan\\.pt/pt/carrinho"
+    }
+  },
+  "extraction": {
+    "availableSlots": {
+      "description": "Extract all available delivery slots",
+      "container": "timeSlotsContainer",
+      "item": "timeSlot",
+      "fields": {
+        "time": "data-time attribute",
+        "price": "data-price attribute",
+        "isFree": "data-is-free attribute (boolean)",
+        "isExpress": "data-express attribute (boolean)",
+        "storeId": "data-slot-store-id attribute",
+        "hasSlots": "data-has-slots-to-book attribute (boolean)"
+      }
+    },
+    "availableDays": {
+      "description": "Extract available delivery days",
+      "container": "dayTabsContainer",
+      "item": "dayTabDate",
+      "fields": {
+        "date": "data-date attribute (ISO date)",
+        "locale": "data-locale attribute",
+        "displayText": "text content (e.g., '14 janeiro')",
+        "hasLimitedAvailability": "parent data-day-has-limited-availability"
+      }
+    }
+  },
+  "api": {
+    "slotsEndpoint": "/on/demandware.store/Sites-AuchanPT-Site/pt_PT/Delivery-Slots",
+    "bookSlotEndpoint": "/on/demandware.store/Sites-AuchanPT-Site/pt_PT/Delivery-BookSlot",
+    "notes": "Endpoints found in data-slots-url and data-book-slot-url attributes"
+  }
+}
