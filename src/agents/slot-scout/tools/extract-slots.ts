@@ -2,7 +2,14 @@
  * ExtractSlotsTool
  *
  * Extracts delivery slot data from the slot selection page.
- * Parses calendar/list view to collect available time windows.
+ * Uses VERIFIED selectors from data/selectors/pages/delivery-slots/v1.json
+ *
+ * Key selectors:
+ * - .auc-book-slot__container - page container
+ * - .auc-book-slot__week-days-tabs - day tabs
+ * - .nav-link-tab.nav-link - individual day tab
+ * - .auc-book-slot__slot - time slot with data attributes
+ *   - data-time, data-price, data-is-free, data-express
  *
  * CRITICAL: Uses PORTUGUESE_DAY_NAMES for day parsing.
  */
@@ -12,10 +19,30 @@ import type { ExtractSlotsInput, ExtractSlotsOutput } from './types.js';
 import type { DeliverySlot, SlotStatus, DeliveryType } from '../types.js';
 import { PORTUGUESE_DAY_NAMES } from '../types.js';
 
+// =============================================================================
+// Verified Selectors (from data/selectors/pages/delivery-slots/v1.json)
+// =============================================================================
+
+const VERIFIED_SELECTORS = {
+  pageContainer: '.auc-book-slot__container',
+  dayTabsContainer: '.auc-book-slot__week-days-tabs',
+  dayTab: '.nav-link-tab.nav-link',
+  dayTabActive: '.nav-link-tab.nav-link.active',
+  dayTabDate: '.auc-run-day-month[data-date]',
+  timeSlotsContainer: '.auc-book-slot__slots',
+  timeSlot: '.auc-book-slot__slot',
+  slotTime: '.auc-slot__time',
+  slotPrice: '.auc-slot__desc',
+} as const;
+
+// =============================================================================
+// Legacy Text Parsing Functions (for fallback scenarios)
+// =============================================================================
+
 /**
- * Parse slot status from text indicators
+ * Parse slot status from text indicators (fallback for non-data-attribute pages)
  */
-function parseSlotStatus(text: string): SlotStatus {
+export function parseSlotStatusFromText(text: string): SlotStatus {
   const lowerText = text.toLowerCase();
 
   if (
@@ -51,9 +78,9 @@ function parseSlotStatus(text: string): SlotStatus {
 }
 
 /**
- * Parse delivery type from text
+ * Parse delivery type from text (fallback)
  */
-function parseDeliveryType(text: string): DeliveryType {
+export function parseDeliveryTypeFromText(text: string): DeliveryType {
   const lowerText = text.toLowerCase();
 
   if (lowerText.includes('expresso') || lowerText.includes('express')) {
@@ -76,9 +103,9 @@ function parseDeliveryType(text: string): DeliveryType {
 }
 
 /**
- * Parse delivery cost from text (e.g., "€3,50" or "Grátis")
+ * Parse delivery cost from text (e.g., "€3,50" or "Grátis") - fallback
  */
-function parseDeliveryCost(text: string): {
+export function parseDeliveryCostFromText(text: string): {
   cost: number;
   freeAboveThreshold?: boolean;
   threshold?: number;
@@ -114,9 +141,9 @@ function parseDeliveryCost(text: string): {
 }
 
 /**
- * Parse date from Portuguese day name and date string
+ * Parse date from Portuguese day name and date string (fallback)
  */
-function parseSlotDate(dayName: string, dateStr?: string): Date | null {
+export function parseSlotDateFromText(dayName: string, dateStr?: string): Date | null {
   const now = new Date();
 
   // If we have a full date string (e.g., "12/01/2026"), parse it
@@ -198,70 +225,22 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
         screenshots.push(initialScreenshot);
       }
 
-      // Strategy: Try multiple selector patterns to find slot elements
-      // Common patterns:
-      // - Calendar days with time slots
-      // - List of time slots grouped by day
-      // - Grid of delivery windows
+      // =======================================================================
+      // Strategy: Use VERIFIED selectors with data attributes
+      // =======================================================================
 
-      const slotContainerSelectors = [
-        '[class*="slot"]',
-        '[class*="delivery"]',
-        '[class*="timeslot"]',
-        '[class*="horario"]',
-        '[data-testid*="slot"]',
-        'div[role="button"]',
-        'button[class*="slot"]',
-      ];
-
-      const slotElements: Array<{ element: any; text: string }> = [];
-
-      // Try to find slot container elements
-      for (const containerSelector of slotContainerSelectors) {
-        try {
-          const elements = await page.$$(containerSelector);
-
-          if (elements.length > 0) {
-            logger.info('Found potential slot elements', {
-              selector: containerSelector,
-              count: elements.length,
-            });
-
-            // Get text content for each element
-            for (const element of elements) {
-              const text = (await element.textContent()) ?? '';
-              if (text.trim()) {
-                slotElements.push({ element, text });
-              }
-            }
-
-            if (slotElements.length > 0) {
-              break; // Found valid elements
-            }
-          }
-        } catch (err) {
-          logger.debug('Selector failed', {
-            selector: containerSelector,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-
-      if (slotElements.length === 0) {
-        logger.warn('No slot elements found on page');
-
-        // Try to get page text to analyze
-        const bodyText = await page.textContent('body').catch(() => '') ?? '';
-        logger.debug('Page body text sample', {
-          textSample: bodyText.slice(0, 500),
+      // First check if we're on the right page
+      const pageContainer = await page.$(VERIFIED_SELECTORS.pageContainer);
+      if (!pageContainer) {
+        logger.warn('Not on delivery slots page - container not found', {
+          selector: VERIFIED_SELECTORS.pageContainer,
         });
 
         if (captureScreenshots) {
-          const noSlotsScreenshot = await screenshot('extract-slots-no-elements');
-          screenshots.push(noSlotsScreenshot);
+          const noPageScreenshot = await screenshot('extract-slots-wrong-page');
+          screenshots.push(noPageScreenshot);
         }
 
-        // Return empty result but still success (page might be empty legitimately)
         return {
           success: true,
           data: {
@@ -275,72 +254,103 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
         };
       }
 
-      logger.info('Processing slot elements', { count: slotElements.length });
+      logger.info('Found delivery slots page container');
 
-      // Parse each slot element
+      // Extract available days from day tabs
+      const dayTabs = await page.$$(VERIFIED_SELECTORS.dayTabDate);
+      const availableDays: Array<{ date: string; displayText: string }> = [];
+
+      for (const tab of dayTabs) {
+        const dateAttr = await tab.getAttribute('data-date');
+        const displayText = await tab.textContent();
+        if (dateAttr) {
+          availableDays.push({
+            date: dateAttr,
+            displayText: displayText?.trim() ?? '',
+          });
+        }
+      }
+
+      logger.info('Found available days', {
+        count: availableDays.length,
+        days: availableDays.map(d => d.date),
+      });
+
+      // Extract slots using data attributes
+      const slotElements = await page.$$(VERIFIED_SELECTORS.timeSlot);
+      logger.info('Found time slot elements', { count: slotElements.length });
+
+      if (slotElements.length === 0) {
+        logger.warn('No slot elements found');
+
+        if (captureScreenshots) {
+          const noSlotsScreenshot = await screenshot('extract-slots-no-elements');
+          screenshots.push(noSlotsScreenshot);
+        }
+
+        return {
+          success: true,
+          data: {
+            slots: [],
+            daysChecked: availableDays.length,
+            sourceUrl,
+            screenshots,
+          },
+          screenshots,
+          duration: Date.now() - start,
+        };
+      }
+
+      // Parse each slot using data attributes
       let daysChecked = 0;
       const seenDates = new Set<string>();
 
-      for (const { text } of slotElements) {
+      // Get current active day tab to know which date the slots belong to
+      const activeTab = await page.$(VERIFIED_SELECTORS.dayTabActive);
+      let currentDate: string | null = null;
+
+      if (activeTab) {
+        const dateEl = await activeTab.$(VERIFIED_SELECTORS.dayTabDate.replace('.auc-run-day-month', ''));
+        if (dateEl) {
+          currentDate = await dateEl.getAttribute('data-date');
+        }
+      }
+
+      // If we couldn't get current date, use the first available day
+      if (!currentDate && availableDays.length > 0) {
+        currentDate = availableDays[0]?.date ?? null;
+      }
+
+      // Default to today if still no date
+      if (!currentDate) {
+        currentDate = new Date().toISOString().split('T')[0] ?? '';
+      }
+
+      logger.info('Extracting slots for date', { currentDate });
+
+      for (const element of slotElements) {
         if (slots.length >= maxSlots) {
           logger.info('Reached maxSlots limit', { maxSlots });
           break;
         }
 
-        // Try to extract slot information from text
-        // Expected patterns:
-        // - "Segunda-feira 13/01 - 10:00-12:00 - €3,50"
-        // - "14:00 - 16:00 Disponível"
-        // - Day + time + price/status
+        // Extract data attributes
+        const timeAttr = await element.getAttribute('data-time');
+        const priceAttr = await element.getAttribute('data-price');
+        const isFreeAttr = await element.getAttribute('data-is-free');
+        const isExpressAttr = await element.getAttribute('data-express');
+        const hasSlotsAttr = await element.getAttribute('data-has-slots-to-book');
+        const storeIdAttr = await element.getAttribute('data-slot-store-id');
 
-        // Find day name
-        let dayName = '';
-        let dayOfWeek = -1;
-        for (let i = 0; i < PORTUGUESE_DAY_NAMES.length; i++) {
-          if (text.includes(PORTUGUESE_DAY_NAMES[i] ?? '')) {
-            dayName = PORTUGUESE_DAY_NAMES[i] ?? '';
-            dayOfWeek = i;
-            break;
-          }
-        }
-
-        // Find date (DD/MM or DD/MM/YYYY)
-        const dateMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{4}))?/);
-        let date: Date | null = null;
-
-        if (dateMatch) {
-          const day = parseInt(dateMatch[1] ?? '0', 10);
-          const month = parseInt(dateMatch[2] ?? '0', 10) - 1;
-          const year = dateMatch[3] ? parseInt(dateMatch[3], 10) : new Date().getFullYear();
-          date = new Date(year, month, day);
-
-          if (dayOfWeek === -1) {
-            dayOfWeek = date.getDay();
-          }
-        } else if (dayName) {
-          // Try to infer date from day name
-          date = parseSlotDate(dayName);
-          if (date) {
-            dayOfWeek = date.getDay();
-          }
-        }
-
-        if (!date) {
-          logger.debug('Could not parse date from slot element', { text });
+        if (!timeAttr) {
+          logger.debug('Slot element missing data-time attribute');
           continue;
         }
 
-        // Track days checked
-        const dateKey = date.toISOString().split('T')[0];
-        if (dateKey && !seenDates.has(dateKey)) {
-          seenDates.add(dateKey);
-          daysChecked++;
-        }
-
-        // Find time range (HH:MM - HH:MM or HH:MM-HH:MM)
-        const timeMatch = text.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+        // Parse time range (e.g., "12:30 - 14:30")
+        const timeMatch = timeAttr.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
         if (!timeMatch) {
-          logger.debug('Could not parse time from slot element', { text });
+          logger.debug('Could not parse time from data-time', { timeAttr });
           continue;
         }
 
@@ -352,30 +362,61 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
         const startTime = `${startHour.padStart(2, '0')}:${startMin}`;
         const endTime = `${endHour.padStart(2, '0')}:${endMin}`;
 
-        // Parse status
-        const status = parseSlotStatus(text);
+        // Parse date
+        const date = new Date(currentDate + 'T00:00:00');
+        const dayOfWeek = date.getDay();
 
-        // Parse delivery cost
-        const { cost, freeAboveThreshold, threshold } = parseDeliveryCost(text);
+        // Track days
+        const dateKey = currentDate;
+        if (dateKey && !seenDates.has(dateKey)) {
+          seenDates.add(dateKey);
+          daysChecked++;
+        }
+
+        // Parse price (e.g., "5,99 €")
+        let cost = 0;
+        if (priceAttr) {
+          const priceMatch = priceAttr.match(/(\d+(?:[.,]\d+)?)/);
+          if (priceMatch?.[1]) {
+            cost = parseFloat(priceMatch[1].replace(',', '.'));
+          }
+        }
+
+        // Parse status from data attributes
+        const isFree = isFreeAttr === 'true';
+        const hasSlots = hasSlotsAttr === 'true';
+        const isExpress = isExpressAttr === 'true';
+
+        let status: SlotStatus = 'unknown';
+        if (hasSlots) {
+          status = 'available';
+        } else {
+          status = 'full';
+        }
 
         // Parse delivery type
-        const deliveryType = parseDeliveryType(text);
+        const deliveryType: DeliveryType = isExpress ? 'express' : 'standard';
 
         // Create slot
         const slot: DeliverySlot = {
+          slotId: storeIdAttr ?? undefined,
           date,
           dayOfWeek,
           startTime,
           endTime,
           status,
-          deliveryCost: cost,
-          freeAboveThreshold,
-          freeDeliveryThreshold: threshold,
+          deliveryCost: isFree ? 0 : cost,
+          freeAboveThreshold: isFree,
           deliveryType,
         };
 
         slots.push(slot);
-        logger.debug('Extracted slot', { slot, text });
+        logger.debug('Extracted slot from data attributes', {
+          time: timeAttr,
+          price: priceAttr,
+          isFree,
+          hasSlots,
+        });
       }
 
       // Look for minimum order value in page text

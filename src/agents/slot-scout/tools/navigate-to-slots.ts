@@ -11,6 +11,23 @@ import type { Tool, ToolResult, ToolContext, ToolError } from '../../../types/to
 import type { NavigateToSlotsInput, NavigateToSlotsOutput } from './types.js';
 import { createSelectorResolver } from '../../../selectors/resolver.js';
 
+// =============================================================================
+// Verified Selectors (from data/selectors/pages)
+// =============================================================================
+
+const CART_SELECTORS = {
+  checkoutButton: '.checkout-btn.auc-button__rounded--primary',
+  checkoutButtonFallback: 'button:has-text("Finalizar compra")',
+  unavailableModal: '#confirm-unavailable-products-removal',
+  removeUnavailableButton: '.auc-js-cart-remove-unavailable-products',
+} as const;
+
+const SLOT_PAGE_SELECTORS = {
+  pageContainer: '.auc-book-slot__container',
+  dayTabs: '.auc-book-slot__week-days-tabs',
+  timeSlot: '.auc-book-slot__slot',
+} as const;
+
 /**
  * NavigateToSlotsTool implementation.
  *
@@ -62,18 +79,15 @@ export const navigateToSlotsTool: Tool<NavigateToSlotsInput, NavigateToSlotsOutp
         screenshots.push(cartScreenshot);
       }
 
-      // Step 2: Find and click checkout button
+      // Step 2: Find and click checkout button using verified selectors
       logger.info('Looking for checkout button on cart page');
 
-      // Try to find checkout button using cart selectors
-      // NOTE: If checkout selector doesn't exist, we'll need to discover it
-      // For now, try common patterns
+      // Try verified selector first, then fallbacks
       const checkoutButtonSelectors = [
-        'button:has-text("Finalizar compra")',
+        CART_SELECTORS.checkoutButton,
+        CART_SELECTORS.checkoutButtonFallback,
         'a:has-text("Finalizar compra")',
         '[data-testid="checkout-button"]',
-        '.checkout-button',
-        'button[type="submit"]:has-text("Finalizar")',
       ];
 
       let checkoutButton = null;
@@ -109,13 +123,32 @@ export const navigateToSlotsTool: Tool<NavigateToSlotsInput, NavigateToSlotsOutp
         };
       }
 
-      // Click checkout button
+      // Click checkout button (use JavaScript click for reliability)
       logger.info('Clicking checkout button');
-      await checkoutButton.click();
+      await page.locator(CART_SELECTORS.checkoutButton).click({ force: true });
 
-      // Wait for navigation
+      // Wait for potential modal or navigation
+      await page.waitForTimeout(2000);
+
+      // Step 2b: Handle unavailable products modal if it appears
+      const modal = page.locator(CART_SELECTORS.unavailableModal);
+      const modalVisible = await modal.evaluate((el) => el.classList.contains('show')).catch(() => false);
+
+      if (modalVisible) {
+        logger.info('Unavailable products modal appeared - removing unavailable items');
+
+        const modalScreenshot = await screenshot('navigate-slots-unavailable-modal');
+        screenshots.push(modalScreenshot);
+
+        // Click confirm to remove unavailable products
+        await page.locator(CART_SELECTORS.removeUnavailableButton).click();
+
+        // Wait for removal and navigation
+        await page.waitForTimeout(5000);
+      }
+
+      // Wait for navigation to complete
       await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
-      await page.waitForTimeout(2000); // Allow for any redirects/animations
 
       const afterCheckoutUrl = page.url();
       logger.info('After checkout click', { url: afterCheckoutUrl });
@@ -172,32 +205,50 @@ export const navigateToSlotsTool: Tool<NavigateToSlotsInput, NavigateToSlotsOutp
         }
       }
 
-      // Step 4: Verify we're on delivery slot selection page
+      // Step 4: Verify we're on delivery slot selection page using VERIFIED selectors
       const finalUrl = page.url();
       logger.info('Final URL after navigation', { url: finalUrl });
 
-      // Look for slot-related elements to confirm we're on the right page
-      // Common patterns: calendar, time slots, delivery options
-      const slotIndicators = [
-        'div[class*="slot"]',
-        'div[class*="delivery"]',
-        'div[class*="horario"]',
-        'div[class*="calendar"]',
-        '[data-testid*="slot"]',
-        'button:has-text("Entrega")',
+      // Use verified selectors to confirm we're on the slots page
+      const verifiedSlotIndicators = [
+        SLOT_PAGE_SELECTORS.pageContainer,
+        SLOT_PAGE_SELECTORS.dayTabs,
+        SLOT_PAGE_SELECTORS.timeSlot,
       ];
 
       let slotsAvailable = false;
-      for (const selector of slotIndicators) {
+      for (const selector of verifiedSlotIndicators) {
         try {
-          const element = await page.waitForSelector(selector, { timeout: 3000 });
+          const element = await page.waitForSelector(selector, { timeout: 5000 });
           if (element) {
-            logger.info('Found slot indicator', { selector });
+            logger.info('Found verified slot indicator', { selector });
             slotsAvailable = true;
             break;
           }
         } catch {
-          // Try next
+          // Try next verified selector
+        }
+      }
+
+      // If verified selectors don't match, try fallback indicators
+      if (!slotsAvailable) {
+        const fallbackIndicators = [
+          'div[class*="slot"]',
+          'div[class*="delivery"]',
+          '[data-time]',
+        ];
+
+        for (const selector of fallbackIndicators) {
+          try {
+            const element = await page.waitForSelector(selector, { timeout: 2000 });
+            if (element) {
+              logger.info('Found fallback slot indicator', { selector });
+              slotsAvailable = true;
+              break;
+            }
+          } catch {
+            // Continue
+          }
         }
       }
 
