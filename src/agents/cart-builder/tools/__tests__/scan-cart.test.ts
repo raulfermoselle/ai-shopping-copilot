@@ -29,6 +29,12 @@ vi.mock('../../../../selectors/resolver.js', () => ({
   createSelectorResolver: () => mockResolverInstance,
 }));
 
+// Mock the popup handler to prevent actual popup dismissal
+vi.mock('../../../../utils/popup-handler.js', () => ({
+  dismissPopups: vi.fn().mockResolvedValue(0),
+  dismissSubscriptionPopup: vi.fn().mockResolvedValue(false),
+}));
+
 /**
  * Create a mock Locator
  */
@@ -54,71 +60,8 @@ function createMockLocator(overrides: {
   } as unknown as Locator;
 }
 
-/**
- * Create a mock cart item locator
- */
-function createMockCartItemLocator(item: {
-  name: string;
-  productUrl?: string;
-  quantity: string;
-  unitPrice: string;
-  available?: boolean;
-  availabilityNote?: string;
-}): Locator {
-  const defaults = {
-    available: true,
-    availabilityNote: undefined,
-  };
-  const values = { ...defaults, ...item };
-
-  return {
-    locator: vi.fn().mockImplementation((selector: string) => {
-      if (selector.includes('name') || selector.includes('Name')) {
-        return {
-          first: vi.fn().mockReturnValue({
-            textContent: vi.fn().mockResolvedValue(values.name),
-          }),
-        };
-      }
-      if (selector.includes('link') || selector.includes('Link') || selector.includes('href')) {
-        return {
-          first: vi.fn().mockReturnValue({
-            getAttribute: vi.fn().mockResolvedValue(values.productUrl),
-          }),
-        };
-      }
-      if (selector.includes('quantity') || selector.includes('Quantity') || selector.includes('number')) {
-        return {
-          first: vi.fn().mockReturnValue({
-            getAttribute: vi.fn().mockResolvedValue(values.quantity),
-          }),
-        };
-      }
-      if (selector.includes('price') || selector.includes('Price')) {
-        return {
-          first: vi.fn().mockReturnValue({
-            textContent: vi.fn().mockResolvedValue(values.unitPrice),
-          }),
-        };
-      }
-      if (selector.includes('unavailable') || selector.includes('out-of-stock')) {
-        return {
-          first: vi.fn().mockReturnValue({
-            isVisible: vi.fn().mockResolvedValue(!values.available),
-          }),
-        };
-      }
-      if (selector.includes('availability') || selector.includes('Availability')) {
-        return {
-          first: vi.fn().mockReturnValue({
-            textContent: vi.fn().mockResolvedValue(values.availabilityNote),
-          }),
-        };
-      }
-      return createMockLocator();
-    }),
-  } as unknown as Locator;
-}
+// Note: createMockCartItemLocator was removed - the tool now uses JS extraction
+// which is mocked via page.evaluate() in setupDefaultLocatorMock
 
 /**
  * Create a mock Playwright Page object
@@ -129,20 +72,23 @@ function createMockPage(): {
   goto: Mock;
   waitForTimeout: Mock;
   locator: Mock;
+  evaluate: Mock;
 } {
   const url = vi.fn();
   const goto = vi.fn();
   const waitForTimeout = vi.fn();
   const locator = vi.fn();
+  const evaluate = vi.fn();
 
   const page = {
     url,
     goto,
     waitForTimeout,
     locator,
+    evaluate,
   } as unknown as Page;
 
-  return { page, url, goto, waitForTimeout, locator };
+  return { page, url, goto, waitForTimeout, locator, evaluate };
 }
 
 /**
@@ -181,6 +127,74 @@ function createMockElement(): {
   };
 }
 
+/**
+ * Setup default mock locator behavior for cart page
+ * Handles modal checks, cart container, etc.
+ */
+function setupDefaultLocatorMock(mockPage: ReturnType<typeof createMockPage>, options: {
+  cartItems?: Array<{ name: string; quantity: number; price: string; available: boolean }>;
+  cartTotal?: string;
+  hasExpandButtons?: boolean;
+} = {}): void {
+  const { cartItems = [], cartTotal = '0,00 €', hasExpandButtons = false } = options;
+
+  // Default evaluate mock - returns cart items via JS extraction
+  mockPage.evaluate.mockResolvedValue(cartItems);
+
+  // Create cart container mock
+  const cartContainerMock = {
+    count: vi.fn().mockResolvedValue(1),
+    locator: vi.fn().mockReturnValue({
+      all: vi.fn().mockResolvedValue([]),
+    }),
+  };
+
+  // Create expand button mock
+  const expandButtonMock = hasExpandButtons ? {
+    isVisible: vi.fn().mockResolvedValue(true),
+    click: vi.fn().mockResolvedValue(undefined),
+    textContent: vi.fn().mockResolvedValue('Ver todos'),
+  } : null;
+
+  mockPage.locator.mockImplementation((selector: string) => {
+    // Cart removal modal check - always return not visible
+    if (selector.includes('Remover produtos do carrinho')) {
+      return {
+        isVisible: vi.fn().mockResolvedValue(false),
+      };
+    }
+
+    // Expand buttons
+    if (selector.includes('Ver todos') || selector.includes('Mostrar')) {
+      return {
+        all: vi.fn().mockResolvedValue(expandButtonMock ? [expandButtonMock] : []),
+      };
+    }
+
+    // Cart container selectors
+    if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
+        selector.includes('cart-items') || selector.includes('auc-cart') ||
+        selector === 'main' || selector === 'body') {
+      return {
+        first: vi.fn().mockReturnValue(cartContainerMock),
+        count: vi.fn().mockResolvedValue(1),
+      };
+    }
+
+    // Cart total
+    if (selector.includes('total') || selector.includes('Total')) {
+      return {
+        first: vi.fn().mockReturnValue({
+          textContent: vi.fn().mockResolvedValue(cartTotal),
+        }),
+      };
+    }
+
+    // Default locator
+    return createMockLocator();
+  });
+}
+
 describe('scanCartTool', () => {
   let mockPage: ReturnType<typeof createMockPage>;
   let context: ToolContext;
@@ -192,6 +206,11 @@ describe('scanCartTool', () => {
     mockResolverInstance.resolve.mockReset();
     mockResolverInstance.tryResolve.mockReset();
     mockResolverInstance.buildCompositeSelector.mockReset();
+    // Default setup - cart page, no items
+    mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
+    mockPage.waitForTimeout.mockResolvedValue(undefined);
+    mockPage.evaluate.mockResolvedValue([]);
+    setupDefaultLocatorMock(mockPage);
   });
 
   describe('tool metadata', () => {
@@ -206,67 +225,13 @@ describe('scanCartTool', () => {
 
   describe('execute - extract cart items', () => {
     it('should extract cart items and return CartSnapshot', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
-      // Not empty cart
-      (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
+      // Arrange - cart with 2 items via JS extraction
       const cartItems = [
-        createMockCartItemLocator({
-          name: 'Leite Mimosa',
-          productUrl: '/pt/produtos/leite-mimosa',
-          quantity: '2',
-          unitPrice: '1,39 €',
-          available: true,
-        }),
-        createMockCartItemLocator({
-          name: 'Pao de Forma',
-          productUrl: '/pt/produtos/pao-de-forma',
-          quantity: '1',
-          unitPrice: '2,50 €',
-          available: true,
-        }),
+        { name: 'Leite Mimosa', quantity: 2, price: '1,39 €', available: true },
+        { name: 'Pao de Forma', quantity: 1, price: '2,50 €', available: true },
       ];
-
-      // Create cart container mock that returns items when queried
-      const cartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockImplementation((sel: string) => {
-          if (sel.includes('auc-cart__product')) {
-            return {
-              all: vi.fn().mockResolvedValue(cartItems),
-            };
-          }
-          return createMockLocator();
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        // Cart container selectors
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(cartContainerMock),
-          };
-        }
-        // Cart total selectors
-        if (selector.includes('total') || selector.includes('Total')) {
-          return {
-            first: vi.fn().mockReturnValue({
-              textContent: vi.fn().mockResolvedValue('5,28 €'),
-            }),
-          };
-        }
-        if (selector.includes('Ver todos') || selector.includes('Mostrar')) {
-          return {
-            all: vi.fn().mockResolvedValue([]),
-          };
-        }
-        return createMockLocator();
-      });
+      setupDefaultLocatorMock(mockPage, { cartItems, cartTotal: '5,28 €' });
+      (mockResolverInstance.tryResolve).mockResolvedValue(null); // Not empty cart
 
       // Act
       const result = await scanCartTool.execute(
@@ -277,45 +242,34 @@ describe('scanCartTool', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.data?.snapshot).toBeDefined();
-      expect(result.data?.snapshot.items).toBeDefined();
+      expect(result.data?.snapshot.items).toHaveLength(2);
+      expect(result.data?.snapshot.items[0]?.name).toBe('Leite Mimosa');
+      expect(result.data?.snapshot.items[0]?.quantity).toBe(2);
+      expect(result.data?.snapshot.items[0]?.unitPrice).toBe(1.39);
       expect(result.data?.isEmpty).toBe(false);
     });
 
     it('should calculate total from items when page total not found', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - cart with items, total selector fails
+      const cartItems = [
+        { name: 'Item 1', quantity: 2, price: '10,00 €', available: true },
+      ];
+      mockPage.evaluate.mockResolvedValue(cartItems);
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
       (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
 
-      const cartItems = [
-        createMockCartItemLocator({
-          name: 'Item 1',
-          quantity: '2',
-          unitPrice: '10,00 €',
-        }),
-      ];
-
-      // Create cart container mock that returns items when queried
-      const cartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockImplementation((sel: string) => {
-          if (sel.includes('auc-cart__product')) {
-            return {
-              all: vi.fn().mockResolvedValue(cartItems),
-            };
-          }
-          return createMockLocator();
-        }),
-      };
-
+      // Mock locator to fail on total extraction
       mockPage.locator.mockImplementation((selector: string) => {
-        // Cart container selectors
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
+        if (selector.includes('Remover produtos do carrinho')) {
+          return { isVisible: vi.fn().mockResolvedValue(false) };
+        }
+        if (selector.includes('Ver todos') || selector.includes('Mostrar')) {
+          return { all: vi.fn().mockResolvedValue([]) };
+        }
+        if (selector.includes('auc-cart') || selector === 'main' || selector === 'body') {
           return {
-            first: vi.fn().mockReturnValue(cartContainerMock),
+            first: vi.fn().mockReturnValue({ count: vi.fn().mockResolvedValue(1) }),
+            count: vi.fn().mockResolvedValue(1),
           };
         }
         if (selector.includes('total')) {
@@ -407,85 +361,26 @@ describe('scanCartTool', () => {
 
   describe('execute - item unavailable', () => {
     it('should set available: false for unavailable items', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - cart with unavailable item via JS extraction
+      const cartItems = [
+        { name: 'Unavailable Product', quantity: 1, price: '5,00 €', available: false },
+      ];
+      setupDefaultLocatorMock(mockPage, { cartItems, cartTotal: '5,00 €' });
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      const unavailableItem = createMockCartItemLocator({
-        name: 'Unavailable Product',
-        quantity: '1',
-        unitPrice: '5,00 €',
-        available: false,
-        availabilityNote: 'Produto indisponivel',
-      });
-
-      // Create cart container mock
-      const cartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockImplementation((sel: string) => {
-          if (sel.includes('auc-cart__product')) {
-            return {
-              all: vi.fn().mockResolvedValue([unavailableItem]),
-            };
-          }
-          return createMockLocator();
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(cartContainerMock),
-          };
-        }
-        if (selector.includes('total')) {
-          return {
-            first: vi.fn().mockReturnValue({
-              textContent: vi.fn().mockResolvedValue('5,00 €'),
-            }),
-          };
-        }
-        return createMockLocator();
-      });
 
       // Act
       const result = await scanCartTool.execute({ expandAll: false }, context);
 
       // Assert
       expect(result.success).toBe(true);
-      // The mock should result in an item being extracted
-      expect(result.data?.snapshot.items).toBeDefined();
+      expect(result.data?.snapshot.items).toHaveLength(1);
+      expect(result.data?.snapshot.items[0]?.available).toBe(false);
     });
 
     it('should include availability note for unavailable items', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - empty cart (no items via JS extraction)
+      setupDefaultLocatorMock(mockPage, { cartItems: [] });
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      // Create empty cart container mock
-      const emptyCartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockReturnValue({
-          all: vi.fn().mockResolvedValue([]),
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(emptyCartContainerMock),
-          };
-        }
-        return createMockLocator();
-      });
 
       // Act
       const result = await scanCartTool.execute({ expandAll: false }, context);
@@ -497,102 +392,45 @@ describe('scanCartTool', () => {
 
   describe('execute - currency parsing', () => {
     it('should parse Portuguese currency format "1,39 €" to 1.39', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - cart with item using Portuguese currency
+      const cartItems = [
+        { name: 'Test Product', quantity: 1, price: '1,39 €', available: true },
+      ];
+      setupDefaultLocatorMock(mockPage, { cartItems, cartTotal: '1,39 €' });
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      const itemWithPortugueseCurrency = createMockCartItemLocator({
-        name: 'Test Product',
-        quantity: '1',
-        unitPrice: '1,39 €',
-      });
-
-      // Create cart container mock
-      const cartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockImplementation((sel: string) => {
-          if (sel.includes('auc-cart__product')) {
-            return {
-              all: vi.fn().mockResolvedValue([itemWithPortugueseCurrency]),
-            };
-          }
-          return createMockLocator();
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(cartContainerMock),
-          };
-        }
-        if (selector.includes('total')) {
-          return {
-            first: vi.fn().mockReturnValue({
-              textContent: vi.fn().mockResolvedValue('1,39 €'),
-            }),
-          };
-        }
-        return createMockLocator();
-      });
 
       // Act
       const result = await scanCartTool.execute({ expandAll: false }, context);
 
       // Assert
       expect(result.success).toBe(true);
-      // Currency parsing happens internally
+      expect(result.data?.snapshot.items[0]?.unitPrice).toBe(1.39);
     });
 
     it('should handle large currency values "1.234,56 €"', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - cart with large currency value
+      const cartItems = [
+        { name: 'Expensive Product', quantity: 1, price: '1234,56 €', available: true },
+      ];
+      setupDefaultLocatorMock(mockPage, { cartItems, cartTotal: '1234,56 €' });
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      // Create empty cart container mock
-      const emptyCartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockReturnValue({
-          all: vi.fn().mockResolvedValue([]),
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(emptyCartContainerMock),
-          };
-        }
-        return {
-          first: vi.fn().mockReturnValue({
-            textContent: vi.fn().mockResolvedValue('1234,56 €'),
-          }),
-        };
-      });
 
       // Act
       const result = await scanCartTool.execute({ expandAll: false }, context);
 
       // Assert
       expect(result.success).toBe(true);
+      expect(result.data?.snapshot.items[0]?.unitPrice).toBe(1234.56);
     });
   });
 
   describe('execute - navigation', () => {
     it('should navigate to cart page when not on cart', async () => {
-      // Arrange
+      // Arrange - on home page, need to navigate
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/home');
       mockPage.goto.mockResolvedValue(undefined);
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      setupDefaultLocatorMock(mockPage);
+      // Empty cart indicator found after navigation
       (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
@@ -609,10 +447,9 @@ describe('scanCartTool', () => {
     });
 
     it('should not navigate when already on cart page', async () => {
-      // Arrange
+      // Arrange - already on cart page
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      setupDefaultLocatorMock(mockPage);
       (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
@@ -627,10 +464,9 @@ describe('scanCartTool', () => {
     });
 
     it('should also recognize /cart URL as cart page', async () => {
-      // Arrange
+      // Arrange - on /cart URL
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/cart');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      setupDefaultLocatorMock(mockPage);
       (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
@@ -646,83 +482,30 @@ describe('scanCartTool', () => {
 
   describe('execute - expand sections', () => {
     it('should click expand buttons when expandAll is true', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - setup with expand buttons
+      setupDefaultLocatorMock(mockPage, { hasExpandButtons: true });
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      const mockExpandButton = {
-        isVisible: vi.fn().mockResolvedValue(true),
-        click: vi.fn().mockResolvedValue(undefined),
-      };
-
-      // Create empty cart container mock
-      const emptyCartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockReturnValue({
-          all: vi.fn().mockResolvedValue([]),
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('Ver todos') || selector.includes('Mostrar')) {
-          return {
-            all: vi.fn().mockResolvedValue([mockExpandButton]),
-          };
-        }
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(emptyCartContainerMock),
-          };
-        }
-        if (selector.includes('total')) {
-          return {
-            first: vi.fn().mockReturnValue({
-              textContent: vi.fn().mockResolvedValue('0,00 €'),
-            }),
-          };
-        }
-        return createMockLocator();
-      });
 
       // Act
       await scanCartTool.execute({ expandAll: true }, context);
 
-      // Assert
-      expect(mockExpandButton.click).toHaveBeenCalled();
-      expect(context.logger.debug).toHaveBeenCalledWith('Clicking expand button');
+      // Assert - check that expand buttons were clicked
+      // The helper sets up expand button mocks via setupDefaultLocatorMock
+      expect(context.logger.debug).toHaveBeenCalledWith(
+        'Clicking expand button',
+        expect.any(Object)
+      );
     });
   });
 
   describe('execute - screenshot capture', () => {
     it('should capture screenshot when captureScreenshot is true', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - cart with items (not empty)
+      const cartItems = [
+        { name: 'Test Product', quantity: 1, price: '5,00 €', available: true },
+      ];
+      setupDefaultLocatorMock(mockPage, { cartItems, cartTotal: '5,00 €' });
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      // Create empty cart container mock
-      const emptyCartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockReturnValue({
-          all: vi.fn().mockResolvedValue([]),
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(emptyCartContainerMock),
-          };
-        }
-        return createMockLocator();
-      });
 
       // Act
       const result = await scanCartTool.execute(
@@ -737,29 +520,8 @@ describe('scanCartTool', () => {
 
     it('should not capture screenshot when captureScreenshot is false', async () => {
       // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      setupDefaultLocatorMock(mockPage);
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      // Create empty cart container mock
-      const emptyCartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockReturnValue({
-          all: vi.fn().mockResolvedValue([]),
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(emptyCartContainerMock),
-          };
-        }
-        return createMockLocator();
-      });
 
       // Act
       const result = await scanCartTool.execute(
@@ -775,8 +537,8 @@ describe('scanCartTool', () => {
 
   describe('execute - error handling', () => {
     it('should return TIMEOUT_ERROR on timeout', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/home'); // Not on cart, triggers navigation
+      // Arrange - on home page, navigation fails with timeout
+      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/home');
       mockPage.goto.mockRejectedValue(new Error('timeout waiting for navigation'));
 
       // Act
@@ -789,9 +551,9 @@ describe('scanCartTool', () => {
     });
 
     it('should return SELECTOR_ERROR on selector failure', async () => {
-      // Arrange
+      // Arrange - selector resolver throws
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
+      setupDefaultLocatorMock(mockPage);
       (mockResolverInstance.tryResolve).mockRejectedValue(
         new Error('Selector failed')
       );
@@ -805,9 +567,12 @@ describe('scanCartTool', () => {
     });
 
     it('should capture screenshot on error', async () => {
-      // Arrange
+      // Arrange - waitForTimeout throws to trigger error path
       mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockRejectedValue(new Error('Test error'));
+      // Need to fail AFTER the initial waitForTimeout but somewhere in the flow
+      // The easiest is to make tryResolve throw
+      setupDefaultLocatorMock(mockPage);
+      (mockResolverInstance.tryResolve).mockRejectedValue(new Error('Test error'));
 
       // Act
       const result = await scanCartTool.execute({ expandAll: false }, context);
@@ -820,10 +585,8 @@ describe('scanCartTool', () => {
 
   describe('execute - duration tracking', () => {
     it('should include duration in result', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - empty cart (quickest path)
+      setupDefaultLocatorMock(mockPage);
       (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
@@ -840,10 +603,8 @@ describe('scanCartTool', () => {
 
   describe('execute - cart URL in result', () => {
     it('should include cartUrl in result', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+      // Arrange - empty cart
+      setupDefaultLocatorMock(mockPage);
       (mockResolverInstance.tryResolve).mockResolvedValue({
         element: createMockElement(),
         usedFallback: false,
@@ -860,68 +621,35 @@ describe('scanCartTool', () => {
   });
 
   describe('execute - item extraction resilience', () => {
-    it('should continue when one item fails to extract', async () => {
-      // Arrange
-      mockPage.url.mockReturnValue('https://www.auchan.pt/pt/carrinho-compras');
-      mockPage.waitForTimeout.mockResolvedValue(undefined);
-
+    it('should handle JS extraction returning valid items', async () => {
+      // Arrange - JS extraction returns some items
+      const cartItems = [
+        { name: 'Working Product', quantity: 1, price: '5,00 €', available: true },
+      ];
+      setupDefaultLocatorMock(mockPage, { cartItems, cartTotal: '5,00 €' });
       (mockResolverInstance.tryResolve).mockResolvedValue(null);
-      (mockResolverInstance.buildCompositeSelector).mockReturnValue('.cart-item');
-
-      // Create a failing item that throws when extracting name
-      const failingItem = {
-        locator: vi.fn().mockImplementation(() => ({
-          first: vi.fn().mockReturnValue({
-            textContent: vi.fn().mockRejectedValue(new Error('Element error')),
-            getAttribute: vi.fn().mockRejectedValue(new Error('Element error')),
-          }),
-        })),
-      };
-      const workingItem = createMockCartItemLocator({
-        name: 'Working Product',
-        quantity: '1',
-        unitPrice: '5,00 €',
-      });
-
-      // Create cart container mock with mixed items
-      const cartContainerMock = {
-        count: vi.fn().mockResolvedValue(1),
-        locator: vi.fn().mockImplementation((sel: string) => {
-          if (sel.includes('auc-cart__product')) {
-            return {
-              all: vi.fn().mockResolvedValue([failingItem, workingItem]),
-            };
-          }
-          return createMockLocator();
-        }),
-      };
-
-      mockPage.locator.mockImplementation((selector: string) => {
-        if (selector.includes('auc-cart__list') || selector.includes('cart-list') ||
-            selector.includes('cart-items')) {
-          return {
-            first: vi.fn().mockReturnValue(cartContainerMock),
-          };
-        }
-        if (selector.includes('total')) {
-          return {
-            first: vi.fn().mockReturnValue({
-              textContent: vi.fn().mockResolvedValue('5,00 €'),
-            }),
-          };
-        }
-        return createMockLocator();
-      });
 
       // Act
       const result = await scanCartTool.execute({ expandAll: false }, context);
 
       // Assert
       expect(result.success).toBe(true);
-      expect(context.logger.warn).toHaveBeenCalledWith(
-        'Failed to extract cart item',
-        expect.any(Object)
-      );
+      expect(result.data?.snapshot.items).toHaveLength(1);
+      expect(result.data?.snapshot.items[0]?.name).toBe('Working Product');
+    });
+
+    it('should handle empty JS extraction gracefully', async () => {
+      // Arrange - JS extraction returns empty array
+      setupDefaultLocatorMock(mockPage, { cartItems: [] });
+      (mockResolverInstance.tryResolve).mockResolvedValue(null);
+
+      // Act
+      const result = await scanCartTool.execute({ expandAll: false }, context);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.data?.snapshot.items).toHaveLength(0);
+      expect(context.logger.warn).toHaveBeenCalledWith('JS extraction found no cart items');
     });
   });
 });

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Shopping Copilot</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 320px;
+      padding: 16px;
+      background: #f5f5f5;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .status-card {
+      background: white;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .status-label {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .status-value {
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-value.logged-in {
+      color: #22c55e;
+    }
+
+    .status-value.logged-out {
+      color: #ef4444;
+    }
+
+    .status-value.running {
+      color: #3b82f6;
+    }
+
+    .status-value.idle {
+      color: #6b7280;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+
+    .btn-primary:disabled {
+      background: #93c5fd;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #374151;
+      margin-top: 8px;
+    }
+
+    .btn-secondary:hover {
+      background: #d1d5db;
+    }
+
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .api-key-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #ddd;
+    }
+
+    .api-key-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .api-key-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+
+    .footer {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #ddd;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>AI Shopping Copilot</h1>
+  </div>
+
+  <div id="error-container"></div>
+
+  <div class="status-card">
+    <div class="status-row">
+      <span class="status-label">Login Status</span>
+      <span id="login-status" class="status-value logged-out">Not logged in</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Run Status</span>
+      <span id="run-status" class="status-value idle">Idle</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Current Phase</span>
+      <span id="current-phase" class="status-value">-</span>
+    </div>
+  </div>
+
+  <button id="start-btn" class="btn btn-primary" disabled>
+    Start Shopping Assistant
+  </button>
+
+  <button id="scan-btn" class="btn btn-secondary">
+    Scan Current Page
+  </button>
+
+  <div class="api-key-section">
+    <input type="password" id="api-key-input" class="api-key-input"
+           placeholder="Anthropic API Key (optional)">
+    <button id="save-key-btn" class="btn btn-secondary">
+      Save API Key
+    </button>
+  </div>
+
+  <div class="footer">
+    v0.1.0 - AI Shopping Copilot
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

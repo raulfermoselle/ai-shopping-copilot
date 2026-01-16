@@ -6,195 +6,213 @@
 **Branch**: feat/chrome-extension
 **Status**: ACTIVE
 **Created**: 2026-01-16
-**Target Completion**: 2026-01-30
+**Target Completion**: 2026-01-23
 
 ---
 
 ## Sprint Goals
 
-Design and establish the Chrome Extension architecture based on research findings from Sprint-EXT-R-001:
+Design the Chrome Extension architecture with hexagonal separation of concerns, enabling:
 
-1. **Design extension directory structure** - Organize files for manifest, service worker, content scripts, popup UI, styles
-2. **Create architecture documentation** - CLAUDE.md, decisions.md, architecture.md for extension module
-3. **Design data flow models** - Request/response patterns, state management, message passing between components
-4. **Design service worker lifecycle management** - Handle ~30s timeout, session persistence, graceful degradation
-5. **Design content script injection strategy** - Page detection, DOM monitoring, error handling for SPA navigation
-6. **Design extension-specific tool interfaces** - Adapt Playwright tools to extension message-passing pattern
-7. **Create implementation task breakdown** - Detailed tasks for Sprint-EXT-I-001
+1. **Hexagonal architecture design** - Separate pure business logic (testable with Vitest) from Chrome-specific adapters
+2. **Adapter interface definitions** - TypeScript interfaces for Chrome APIs (storage, messaging, tabs)
+3. **Run orchestration state machine** - Design states (idle → running → paused → review → complete) with transitions and guards
+4. **Message protocol specification** - Define protocol between service worker ↔ content scripts ↔ popup
+5. **Agent migration strategy** - Determine which agents move to extension vs stay as shared library
+6. **Error handling patterns** - Design recovery strategies for service worker lifecycle events
 
 ---
 
-## Scope
+## Deliverables
 
-### In Scope
-- Extension directory structure and file organization
-- Architecture documentation (data flow, component interaction)
-- Service worker state machine design
-- Content script lifecycle and messaging protocol
-- Tool interface redesign (Playwright → extension)
-- Implementation planning and task breakdown
-- Security architecture review
+| Deliverable | Output | Location |
+|-------------|--------|----------|
+| Architecture diagram | Core vs adapter layers visualization | `extension/docs/architecture.md` |
+| Adapter interfaces | IStorageAdapter, IMessagingAdapter, ITabsAdapter | `extension/src/adapters/types.ts` |
+| State machine diagram | Transitions, guards, recovery | `extension/docs/state-machine.md` |
+| Message protocol | MessageAction enum, request/response types | `extension/src/types/messages.ts` |
+| Migration plan | Agent mapping document | `extension/docs/migration-plan.md` |
+| Error strategy | Classification and recovery patterns | `extension/docs/error-handling.md` |
 
-### Out of Scope
-- Actual implementation code
-- UI/UX detailed design (prototype from research can be refined)
-- Performance optimization
-- Extension packaging/distribution
-- Auchan.pt integration (Phase 2)
+---
+
+## Constraints
+
+1. **Testability** - Core logic must be testable without Chrome APIs (dependency injection)
+2. **Safety** - Must preserve "never auto-purchase" safety constraint
+3. **Resilience** - Service worker termination must not lose critical state
+4. **Stateless content scripts** - All state in service worker, content scripts are pure DOM accessors
 
 ---
 
 ## Tasks
 
-### T001: Extension Directory Structure Design
+### T001: Hexagonal Architecture Design
 **Status**: PENDING
 **Owner**: Claude Code
-**Description**: Design and establish the folder structure for the extension module
+**Description**: Design the hexagonal (ports and adapters) architecture separating pure business logic from Chrome-specific code
 
 **Deliverables**:
-- Directory layout with manifest, service worker, content scripts, popup, styles
-- File naming conventions and organization principles
-- Configuration file structure (build, env, feature flags)
-- Documentation location guidelines
+- Architecture diagram showing core domain, ports (interfaces), and adapters
+- Directory structure for `extension/src/core/` (pure business logic) and `extension/src/adapters/` (Chrome-specific)
+- Dependency injection strategy for runtime vs test environments
+- Build configuration for shared library bundling
 
 **Acceptance Criteria**:
-- [ ] Directory structure rationale documented
-- [ ] All folders created with README explaining purpose
-- [ ] Build tool configuration prepared (manifest validation, bundling)
-- [ ] Team can understand structure at a glance
+- [ ] ASCII or Mermaid diagram showing core/adapter separation
+- [ ] Core modules have zero Chrome API imports
+- [ ] Adapters implement interfaces defined in ports
+- [ ] Test harness can substitute fake adapters
 
-### T002: Module Documentation (CLAUDE.md + docs/)
+### T002: Chrome API Adapter Interfaces
 **Status**: PENDING
 **Owner**: Claude Code
-**Description**: Create comprehensive module documentation per documentation-system.md
+**Description**: Define TypeScript interfaces for Chrome API adapters
 
 **Deliverables**:
-- `extension/CLAUDE.md` - Module overview, patterns, key concepts
-- `extension/docs/architecture.md` - Data flow, component interaction, state machine
-- `extension/docs/decisions.md` - ADRs for extension-specific choices
-- Cross-references to research documents
+- `IStorageAdapter` - abstract chrome.storage operations
+- `IMessagingAdapter` - abstract chrome.runtime messaging
+- `ITabsAdapter` - abstract chrome.tabs operations
+- `IAlarmsAdapter` - abstract chrome.alarms for keep-alive
+- Factory pattern for adapter instantiation
 
 **Acceptance Criteria**:
-- [ ] CLAUDE.md follows project template (60-80 lines)
-- [ ] Architecture document includes component diagrams (ASCII or Mermaid)
-- [ ] All design decisions documented with rationale
+- [ ] All interfaces defined with full type safety
+- [ ] Fake implementations for testing created
+- [ ] Chrome implementations pass type checking
+- [ ] No `any` types in interfaces
+
+### T003: Run Orchestration State Machine
+**Status**: PENDING
+**Owner**: Claude Code
+**Description**: Design the state machine for shopping run orchestration
+
+**States**:
+- `idle` - No run active, waiting for user to start
+- `running` - Active run with phase (cart, substitution, slots)
+- `paused` - Run paused due to error or user action
+- `review` - Cart prepared, awaiting user approval
+- `complete` - Run finished, results saved
+
+**Deliverables**:
+- State machine diagram with all transitions
+- Guard conditions for each transition
+- Phase sub-states within `running` (cart → substitution → slots)
+- Recovery transitions from service worker restart
+
+**Acceptance Criteria**:
+- [ ] All states and transitions documented
+- [ ] Guards prevent invalid state transitions
+- [ ] Service worker restart recovery path defined
+- [ ] State machine can be implemented with XState or simple reducer
+
+### T004: Message Protocol Specification
+**Status**: PENDING
+**Owner**: Claude Code
+**Description**: Design the message passing protocol between extension components
+
+**Components**:
+- Service Worker (orchestration, API calls, state)
+- Content Scripts (DOM extraction, page interaction)
+- Popup (user controls, status display)
+- Side Panel (future: review pack display)
+
+**Deliverables**:
+- `MessageAction` enum with all action types
+- Request/response type definitions
+- Error response format
+- Timeout and retry semantics
+- Port-based vs one-shot message decision
+
+**Acceptance Criteria**:
+- [ ] All message actions enumerated
+- [ ] Request/response types match 1:1
+- [ ] Error handling is consistent
+- [ ] Service worker lifetime handled gracefully
+
+### T005: Agent Migration Strategy
+**Status**: PENDING
+**Owner**: Claude Code
+**Description**: Plan which agents move to extension vs remain as shared library
+
+**Current Agents**:
+- CartBuilder - loads/merges orders
+- Substitution - finds replacements
+- StockPruner - removes unlikely items
+- SlotScout - finds delivery slots
+- Coordinator - orchestrates run
+
+**Deliverables**:
+- Migration matrix: agent → extension component mapping
+- Shared library extraction plan (pure logic)
+- Extension-specific adaptation requirements
+- Phase-by-phase migration roadmap
+
+**Acceptance Criteria**:
+- [ ] Each agent mapped to extension component
+- [ ] Shared code identified and extracted
+- [ ] No duplicate logic between extension and original
+- [ ] Migration preserves all functionality
+
+### T006: Error Handling & Recovery Patterns
+**Status**: PENDING
+**Owner**: Claude Code
+**Description**: Design error classification and recovery strategies for extension context
+
+**Error Categories**:
+- Network errors (API calls, site navigation)
+- DOM errors (selectors not found, page changed)
+- State errors (invalid transition, data corruption)
+- Chrome API errors (storage quota, permissions)
+- Service worker lifecycle errors (termination, restart)
+
+**Deliverables**:
+- Error classification hierarchy (ErrorType enum)
+- Recovery strategy for each category
+- User notification patterns
+- Logging and debugging strategy
+- Graceful degradation when LLM unavailable
+
+**Acceptance Criteria**:
+- [ ] All error types classified
+- [ ] Recovery procedures documented
+- [ ] User sees helpful error messages
+- [ ] Debug logging captures sufficient context
+
+### T007: Architecture Documentation Assembly
+**Status**: PENDING
+**Owner**: Claude Code
+**Description**: Compile all architecture decisions into final documentation
+
+**Deliverables**:
+- Update `extension/CLAUDE.md` with architecture overview
+- Create `extension/docs/architecture.md` with diagrams
+- Create `extension/docs/decisions.md` with ADRs
+- Create `extension/docs/state-machine.md` with state diagram
+- Create `extension/docs/migration-plan.md` with agent mapping
+- Create `extension/docs/error-handling.md` with recovery patterns
+
+**Acceptance Criteria**:
+- [ ] All documentation complete and consistent
+- [ ] Cross-references between documents work
 - [ ] No forward references to unimplemented features
-
-### T003: Service Worker State Machine
-**Status**: PENDING
-**Owner**: Claude Code
-**Description**: Design state machine for service worker lifecycle
-
-**Deliverables**:
-- State diagram (states: idle, authenticating, running, session-recovery, error)
-- Transition rules and triggers
-- Timeout/recovery handling strategy
-- API request queuing during service worker sleep
-
-**Acceptance Criteria**:
-- [ ] All possible states documented
-- [ ] Transitions have clear entry/exit conditions
-- [ ] Recovery procedures prevent data loss
-- [ ] State diagram can be implemented as code
-
-### T004: Message Protocol Design
-**Status**: PENDING
-**Owner**: Claude Code
-**Description**: Design request/response protocol for content script ↔ service worker communication
-
-**Deliverables**:
-- Message format specification (JSON schema)
-- Request types catalog (navigate, scan, click, extract, etc.)
-- Response types with error handling patterns
-- Timeout and retry strategy
-
-**Acceptance Criteria**:
-- [ ] Message schema defines all fields and types
-- [ ] Request/response types enumerated
-- [ ] Error scenarios documented
-- [ ] Protocol handles service worker lifetime gracefully
-
-### T005: Tool Interface Redesign
-**Status**: PENDING
-**Owner**: Claude Code
-**Description**: Redesign Playwright tool interfaces for extension message-passing
-
-**Deliverables**:
-- Tool interface adaptation patterns (sync → async messaging)
-- Migration guide for each tool category (navigation, extraction, interaction)
-- New tool signatures for content script context
-- Backward compatibility considerations
-
-**Acceptance Criteria**:
-- [ ] All 15+ tools mapped to new interface
-- [ ] Async patterns documented with examples
-- [ ] Error handling strategy defined
-- [ ] Type definitions ready for implementation
-
-### T006: Security Architecture Review
-**Status**: PENDING
-**Owner**: Claude Code
-**Description**: Review security architecture for extension-specific threats
-
-**Deliverables**:
-- Threat model specific to extension (vs Playwright)
-- API key storage security (session storage rationale)
-- Content script isolation and context boundaries
-- CORS handling for Anthropic API calls
-- User approval mechanism design
-
-**Acceptance Criteria**:
-- [ ] No critical security gaps identified
-- [ ] Authentication flow secure against MITM
-- [ ] API key handling prevents leakage
-- [ ] Extension maintains no-auto-purchase guarantee
-
-### T007: Implementation Planning & Task Breakdown
-**Status**: PENDING
-**Owner**: Claude Code
-**Description**: Create detailed task breakdown for Sprint-EXT-I-001
-
-**Deliverables**:
-- tasks.md with 20-30 implementation tasks
-- Task dependencies and execution order
-- Acceptance criteria for each task
-- Testing strategy outline
-
-**Acceptance Criteria**:
-- [ ] All tasks have clear, actionable descriptions
-- [ ] Dependencies documented for parallel execution
-- [ ] Estimation provided (small/medium/large)
-- [ ] tests.md created with test categories
-
-### T008: Architecture Review & Approval
-**Status**: PENDING
-**Owner**: Claude Code
-**Description**: Complete architecture with final review and sign-off
-
-**Deliverables**:
-- All architecture documents finalized
-- Code review completed (documentation, clarity)
-- Risk assessment for Phase 2 implementation
-- Approval recommendation for Sprint-EXT-I-001
-
-**Acceptance Criteria**:
-- [ ] All tasks completed and linked
-- [ ] Documentation review passed
-- [ ] No critical issues identified
-- [ ] Ready to hand off to implementation sprint
+- [ ] Documentation review ready
 
 ---
 
 ## Dependencies
 
-**External**:
-- Chrome Extension API documentation
-- Anthropic API documentation
+**Prerequisites (from Sprint-EXT-R-001)**:
+- `docs/extension/architecture-research.md` - Chrome Extension fundamentals
+- `docs/extension/migration-mapping.md` - Playwright → Extension tool mapping
+- `docs/extension/session-persistence.md` - Storage strategy
+- `docs/extension/security-constraints.md` - Safety requirements
+- `extension/` prototype skeleton for validation
 
 **Internal**:
-- Sprint-EXT-R-001 research documents (reference)
-- Selector Registry system (tool interface patterns)
-- Existing Playwright tools (migration mapping)
+- Existing agent code in `src/agents/` for migration reference
+- Selector Registry system in `src/selectors/`
+- LLM integration in `src/llm/`
 
 ---
 
@@ -202,30 +220,33 @@ Design and establish the Chrome Extension architecture based on research finding
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|-----------|
-| Service worker timeout causing state loss | HIGH | MEDIUM | Design robust state persistence with recovery flow |
-| Message protocol too complex for implementation | MEDIUM | LOW | Keep protocol simple; review before finalizing |
-| Tool redesign incomplete | MEDIUM | MEDIUM | Validate all 15+ tools during T005 |
-| Security gaps in API key handling | HIGH | LOW | Security review (T006) prevents issues early |
-| Implementation tasks too vague | MEDIUM | MEDIUM | Create detailed acceptance criteria during T007 |
+| Service worker termination complexity | HIGH | MEDIUM | T003 designs robust state recovery |
+| Hexagonal architecture overengineering | MEDIUM | LOW | Keep interfaces minimal, add complexity only when needed |
+| Message protocol too complex | MEDIUM | LOW | Start simple, validate with prototype |
+| Agent migration scope creep | MEDIUM | MEDIUM | T005 strictly defines boundaries |
+| Error handling gaps | HIGH | LOW | T006 systematically covers all categories |
 
 ---
 
 ## Success Criteria
 
-- [ ] All 8 tasks completed
-- [ ] Comprehensive architecture documentation in place
-- [ ] Implementation team has clear roadmap
-- [ ] No critical blockers identified for Phase 2
-- [ ] Code review passed
+- [ ] All 7 tasks completed
+- [ ] Architecture diagrams clear and implementable
+- [ ] TypeScript interfaces compile without errors
+- [ ] State machine has no ambiguous transitions
+- [ ] Migration plan covers all agents
+- [ ] Error handling is comprehensive
+- [ ] Ready to hand off to implementation sprint (Sprint-EXT-I-001)
 
 ---
 
 ## Notes
 
-- This sprint bridges research (EXT-R-001) and implementation (EXT-I-001)
-- Architecture quality directly affects implementation speed
-- Documentation should be detailed enough that another developer can implement
-- Consider design patterns that minimize debugging complexity (logging, error handling)
+- This is an **architecture sprint** - no implementation code expected
+- Deliverables are documentation and type definitions
+- Architecture decisions should enable parallel implementation work
+- Prioritize testability - hexagonal pattern ensures core logic is tested without Chrome APIs
+- Reference research findings but don't repeat them verbatim
 
 ---
 

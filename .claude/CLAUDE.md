@@ -204,6 +204,40 @@ Tools are **granular RPA utilities** that the orchestration layer composes. Foll
 
 **Why This Matters**: Granular tools prevent duplicate UI actions, simplify debugging, and allow flexible composition for different workflows.
 
+### Playwright DOM Extraction (CRITICAL)
+
+**Always use `page.evaluate()` with string templates for bulk DOM extraction.** Never iterate with Playwright locators.
+
+**Why**: Playwright locators make individual browser round-trips for each `.textContent()`, `.getAttribute()` call. When extracting data from 10+ elements, this causes 30+ second timeouts. JavaScript `page.evaluate()` runs entirely in the browser and returns all data in one call.
+
+**Pattern**:
+```typescript
+// FAST: Single browser call, returns all data
+const items = await page.evaluate(`
+  (function() {
+    var results = [];
+    var elements = document.querySelectorAll('.product-tile');
+    for (var i = 0; i < elements.length; i++) {
+      var el = elements[i];
+      results.push({
+        name: el.querySelector('.name')?.textContent?.trim() || '',
+        price: el.querySelector('.price')?.textContent?.trim() || ''
+      });
+    }
+    return results;
+  })()
+`) as ProductData[];
+
+// SLOW: Multiple browser round-trips (AVOID)
+const elements = await page.locator('.product-tile').all();
+for (const el of elements) {
+  const name = await el.locator('.name').textContent();  // Round-trip
+  const price = await el.locator('.price').textContent(); // Round-trip
+}
+```
+
+**Note**: Use string template (backticks) for `page.evaluate()` to bypass TypeScript DOM type errors (`document`, `HTMLElement` not recognized in Node context). The code runs in browser context where these types exist.
+
 ---
 
 ## Selector Registry (CRITICAL)

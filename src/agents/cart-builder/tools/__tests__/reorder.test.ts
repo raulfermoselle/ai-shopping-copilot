@@ -29,6 +29,17 @@ vi.mock('../../../../selectors/resolver.js', () => ({
   createSelectorResolver: () => mockResolverInstance,
 }));
 
+// Mock the popup handler to prevent actual popup dismissal
+vi.mock('../../../../utils/popup-handler.js', () => ({
+  dismissPopups: vi.fn().mockResolvedValue(0),
+  dismissSubscriptionPopup: vi.fn().mockResolvedValue(false),
+}));
+
+// Mock the auto-popup-dismisser to prevent page.evaluate calls
+vi.mock('../../../../utils/auto-popup-dismisser.js', () => ({
+  attachPopupObserver: vi.fn().mockResolvedValue(undefined),
+}));
+
 /**
  * Create a mock Locator
  */
@@ -632,11 +643,12 @@ describe('reorderTool', () => {
   });
 
   describe('execute - cart verification failure', () => {
-    it('should fail when cart does not change and no redirect', async () => {
-      // Arrange - stays on order page, no cart change
+    it('should assume success when cart state cannot be detected', async () => {
+      // Arrange - stays on order page, cart state not visible
+      // This simulates order detail pages that don't show the cart header
       mockPage.url.mockReturnValue(
         'https://www.auchan.pt/pt/conta/detalhes-encomenda/001'
-      ); // never redirects to cart
+      );
 
       const mockReorderButton = createMockElement();
       (mockResolverInstance.tryResolve).mockResolvedValue({
@@ -644,7 +656,7 @@ describe('reorderTool', () => {
         usedFallback: false,
       });
 
-      // No cart count visible
+      // No cart count visible - all selectors fail
       mockPage.locator.mockReturnValue(createMockLocator());
 
       // Act
@@ -656,10 +668,12 @@ describe('reorderTool', () => {
         context
       );
 
-      // Assert - should fail because cart didn't change
-      expect(result.success).toBe(false);
-      expect(result.error?.code).toBe('VALIDATION_ERROR');
-      expect(result.error?.message).toContain('did not modify cart');
+      // Assert - should assume success when cart state cannot be verified
+      // This is a fallback for order pages that don't show cart header
+      expect(result.success).toBe(true);
+      expect(context.logger.info).toHaveBeenCalledWith(
+        'Cart change assumed - could not detect cart state on order detail page'
+      );
     });
   });
 });

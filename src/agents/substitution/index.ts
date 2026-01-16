@@ -23,7 +23,37 @@ export {
   checkAvailabilityTool,
   searchProductsTool,
   extractProductInfoTool,
+  navigateToReplacementsPageTool,
+  type NavigateToReplacementsInput,
+  type NavigateToReplacementsOutput,
+  generateSearchQueries,
+  generateQueriesWithLLM,
+  extractSimpleQuery,
+  extractSimpleQueries,
+  generateSearchQueryToolDef,
+  type GenerateSearchQueryInput,
+  type GenerateSearchQueryOutput,
+  addToCartTool,
+  type AddToCartInput,
+  type AddToCartOutput,
+  type AddToCartResult,
+  AddToCartInputSchema,
 } from './tools/index.js';
+
+// Export LLM enhancer
+export {
+  SubstitutionLLMEnhancer,
+  createSubstitutionLLMEnhancer,
+  type SubstitutionLLMEnhancerConfig,
+  type EnhancedSubstituteDecision,
+  type SubstitutionLLMEnhancementResult,
+  type RecommendationLevel,
+  type ValueRating,
+  DEFAULT_SUBSTITUTION_LLM_CONFIG,
+} from './llm-enhancer.js';
+
+// Export analytics
+export * as analytics from './analytics/index.js';
 
 // Export learning module
 export * as learning from './learning/index.js';

@@ -182,13 +182,116 @@ export function parseSlotDateFromText(dayName: string, dateStr?: string): Date |
 }
 
 /**
+ * Extract slots for a specific day from the currently visible slot container.
+ *
+ * @param page - Playwright page
+ * @param dateStr - ISO date string (e.g., "2026-01-15")
+ * @param logger - Logger instance
+ * @param maxSlots - Maximum number of slots to extract
+ * @returns Array of DeliverySlot objects
+ */
+async function extractSlotsForDay(
+  page: import('playwright').Page,
+  dateStr: string,
+  logger: { debug: (msg: string, ctx?: Record<string, unknown>) => void },
+  maxSlots: number
+): Promise<DeliverySlot[]> {
+  const slots: DeliverySlot[] = [];
+
+  const slotElements = await page.$$(VERIFIED_SELECTORS.timeSlot);
+
+  for (const element of slotElements) {
+    if (slots.length >= maxSlots) break;
+
+    // Extract data attributes
+    const timeAttr = await element.getAttribute('data-time');
+    const priceAttr = await element.getAttribute('data-price');
+    const isFreeAttr = await element.getAttribute('data-is-free');
+    const isExpressAttr = await element.getAttribute('data-express');
+    const hasSlotsAttr = await element.getAttribute('data-has-slots-to-book');
+    const storeIdAttr = await element.getAttribute('data-slot-store-id');
+
+    // Get time from data-time attribute OR from innerText
+    let timeSource = timeAttr;
+    if (!timeSource) {
+      const innerText = await element.textContent();
+      if (innerText) {
+        timeSource = innerText.trim();
+      }
+    }
+
+    if (!timeSource) {
+      logger.debug('Slot element missing time information');
+      continue;
+    }
+
+    // Parse time range (e.g., "12:30 - 14:30")
+    const timeMatch = timeSource.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+    if (!timeMatch) {
+      logger.debug('Could not parse time', { timeSource: timeSource.substring(0, 30) });
+      continue;
+    }
+
+    const startHour = timeMatch[1] ?? '00';
+    const startMin = timeMatch[2] ?? '00';
+    const endHour = timeMatch[3] ?? '00';
+    const endMin = timeMatch[4] ?? '00';
+
+    const startTime = `${startHour.padStart(2, '0')}:${startMin}`;
+    const endTime = `${endHour.padStart(2, '0')}:${endMin}`;
+
+    // Parse date from the provided dateStr
+    const date = new Date(dateStr + 'T00:00:00');
+    const dayOfWeek = date.getDay();
+
+    // Parse price
+    let cost = 0;
+    if (priceAttr) {
+      const priceMatch = priceAttr.match(/(\d+(?:[.,]\d+)?)/);
+      if (priceMatch?.[1]) {
+        cost = parseFloat(priceMatch[1].replace(',', '.'));
+      }
+    }
+
+    // Parse status
+    const isFree = isFreeAttr === 'true';
+    const hasSlots = hasSlotsAttr === 'true';
+    const isExpress = isExpressAttr === 'true';
+
+    let status: SlotStatus = 'unknown';
+    if (hasSlots) {
+      status = 'available';
+    } else {
+      status = 'full';
+    }
+
+    const deliveryType: DeliveryType = isExpress ? 'express' : 'standard';
+
+    const slot: DeliverySlot = {
+      slotId: storeIdAttr ?? undefined,
+      date,
+      dayOfWeek,
+      startTime,
+      endTime,
+      status,
+      deliveryCost: isFree ? 0 : cost,
+      freeAboveThreshold: isFree,
+      deliveryType,
+    };
+
+    slots.push(slot);
+  }
+
+  return slots;
+}
+
+/**
  * ExtractSlotsTool implementation.
  *
  * Attempts to extract delivery slots from the current page.
  * Handles multiple possible UI layouts (calendar, list, grid).
  *
- * NOTE: Since there's no checkout selector registry yet, this uses
- * heuristic selectors based on common patterns. May need refinement.
+ * Now supports MULTI-DAY extraction by clicking through day tabs.
  *
  * @example
  * const result = await extractSlotsTool.execute(
@@ -231,6 +334,41 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
 
       // First check if we're on the right page
       const pageContainer = await page.$(VERIFIED_SELECTORS.pageContainer);
+
+      // Debug: Log what elements we can find on the page
+      // Reserved for future debugging use
+      void await page.evaluate(`
+        (function() {
+          const container = document.querySelector('.auc-book-slot__container');
+          const dayTabs = document.querySelectorAll('.nav-link-tab.nav-link');
+          const slots = document.querySelectorAll('.auc-book-slot__slot');
+          const allSlotLike = document.querySelectorAll('[class*="slot"]');
+
+          // Get any calendar/date related elements
+          const dateElements = document.querySelectorAll('[data-date], [class*="date"], [class*="day"]');
+          const timeElements = document.querySelectorAll('[data-time], [class*="time"], [class*="hour"]');
+
+          return {
+            hasContainer: !!container,
+            containerClasses: container ? Array.from(container.classList).join(' ') : null,
+            dayTabsCount: dayTabs.length,
+            slotsCount: slots.length,
+            allSlotLikeCount: allSlotLike.length,
+            dateElementsCount: dateElements.length,
+            timeElementsCount: timeElements.length,
+            bodyClasses: document.body.className,
+            // Get some sample slot-like elements
+            slotLikeSamples: Array.from(allSlotLike).slice(0, 5).map(el => ({
+              tagName: el.tagName,
+              className: el.className.substring(0, 100),
+              dataTime: el.getAttribute('data-time'),
+              dataPrice: el.getAttribute('data-price'),
+            })),
+          };
+        })()
+      `);
+
+
       if (!pageContainer) {
         logger.warn('Not on delivery slots page - container not found', {
           selector: VERIFIED_SELECTORS.pageContainer,
@@ -258,6 +396,7 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
 
       // Extract available days from day tabs
       const dayTabs = await page.$$(VERIFIED_SELECTORS.dayTabDate);
+
       const availableDays: Array<{ date: string; displayText: string }> = [];
 
       for (const tab of dayTabs) {
@@ -271,17 +410,101 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
         }
       }
 
+
       logger.info('Found available days', {
         count: availableDays.length,
         days: availableDays.map(d => d.date),
       });
 
-      // Extract slots using data attributes
-      const slotElements = await page.$$(VERIFIED_SELECTORS.timeSlot);
-      logger.info('Found time slot elements', { count: slotElements.length });
+      // =======================================================================
+      // MULTI-DAY EXTRACTION: Click each day tab and extract slots
+      // =======================================================================
 
-      if (slotElements.length === 0) {
-        logger.warn('No slot elements found');
+      // Find all day tab links (clickable)
+      const dayTabLinks = await page.$$(VERIFIED_SELECTORS.dayTab);
+      const tabsToProcess = Math.min(dayTabLinks.length, daysAhead);
+
+      logger.info('Starting multi-day slot extraction', {
+        totalTabs: dayTabLinks.length,
+        tabsToProcess,
+        daysAhead,
+      });
+
+      // Process each day tab
+      for (let tabIndex = 0; tabIndex < tabsToProcess; tabIndex++) {
+        // Re-find tabs after each click (DOM may change)
+        const currentDayTabs = await page.$$(VERIFIED_SELECTORS.dayTab);
+        const tabToClick = currentDayTabs[tabIndex];
+
+        if (!tabToClick) {
+          logger.warn('Day tab not found at index', { tabIndex });
+          continue;
+        }
+
+        // Get the date for this tab BEFORE clicking (from the data-date child element)
+        const dateElement = await tabToClick.$(`.auc-run-day-month[data-date]`);
+        let tabDate = dateElement ? await dateElement.getAttribute('data-date') : null;
+
+        if (!tabDate && availableDays[tabIndex]) {
+          tabDate = availableDays[tabIndex]?.date ?? null;
+        }
+
+        if (!tabDate) {
+          logger.warn('Could not determine date for tab', { tabIndex });
+          continue;
+        }
+
+        // Click the tab to load its slots (skip first tab if already active)
+        const isActive = await tabToClick.evaluate(el => el.classList.contains('active'));
+
+        if (!isActive || tabIndex > 0) {
+          logger.debug('Clicking day tab', { tabIndex, date: tabDate });
+
+          try {
+            await tabToClick.click({ timeout: 5000 });
+            // Wait for UI to update after clicking
+            await page.waitForTimeout(800);
+
+            // Wait for slots container to be stable
+            await page.waitForSelector(VERIFIED_SELECTORS.timeSlotsContainer, {
+              timeout: 5000,
+              state: 'visible',
+            }).catch(() => {
+              logger.debug('Slots container wait timed out', { tabIndex });
+            });
+          } catch (clickErr) {
+            logger.warn('Failed to click day tab', {
+              tabIndex,
+              date: tabDate,
+              error: clickErr instanceof Error ? clickErr.message : String(clickErr),
+            });
+            continue;
+          }
+        }
+
+        // Extract slots for this day
+        const daySlotsExtracted = await extractSlotsForDay(page, tabDate, logger, maxSlots - slots.length);
+        slots.push(...daySlotsExtracted);
+
+        logger.info('Extracted slots for day', {
+          date: tabDate,
+          slotsFound: daySlotsExtracted.length,
+          totalSoFar: slots.length,
+        });
+
+        // Check if we've hit the max slots limit
+        if (slots.length >= maxSlots) {
+          logger.info('Reached maxSlots limit', { maxSlots, tabsProcessed: tabIndex + 1 });
+          break;
+        }
+      }
+
+      // Update daysChecked to reflect actual tabs processed
+      const daysChecked = new Set(slots.map(s => s.date.toISOString().split('T')[0])).size;
+
+      // If no slots were extracted from multi-day process, return empty
+      if (slots.length === 0) {
+        logger.warn('No slot elements found across any day');
 
         if (captureScreenshots) {
           const noSlotsScreenshot = await screenshot('extract-slots-no-elements');
@@ -299,124 +522,6 @@ export const extractSlotsTool: Tool<ExtractSlotsInput, ExtractSlotsOutput> = {
           screenshots,
           duration: Date.now() - start,
         };
-      }
-
-      // Parse each slot using data attributes
-      let daysChecked = 0;
-      const seenDates = new Set<string>();
-
-      // Get current active day tab to know which date the slots belong to
-      const activeTab = await page.$(VERIFIED_SELECTORS.dayTabActive);
-      let currentDate: string | null = null;
-
-      if (activeTab) {
-        const dateEl = await activeTab.$(VERIFIED_SELECTORS.dayTabDate.replace('.auc-run-day-month', ''));
-        if (dateEl) {
-          currentDate = await dateEl.getAttribute('data-date');
-        }
-      }
-
-      // If we couldn't get current date, use the first available day
-      if (!currentDate && availableDays.length > 0) {
-        currentDate = availableDays[0]?.date ?? null;
-      }
-
-      // Default to today if still no date
-      if (!currentDate) {
-        currentDate = new Date().toISOString().split('T')[0] ?? '';
-      }
-
-      logger.info('Extracting slots for date', { currentDate });
-
-      for (const element of slotElements) {
-        if (slots.length >= maxSlots) {
-          logger.info('Reached maxSlots limit', { maxSlots });
-          break;
-        }
-
-        // Extract data attributes
-        const timeAttr = await element.getAttribute('data-time');
-        const priceAttr = await element.getAttribute('data-price');
-        const isFreeAttr = await element.getAttribute('data-is-free');
-        const isExpressAttr = await element.getAttribute('data-express');
-        const hasSlotsAttr = await element.getAttribute('data-has-slots-to-book');
-        const storeIdAttr = await element.getAttribute('data-slot-store-id');
-
-        if (!timeAttr) {
-          logger.debug('Slot element missing data-time attribute');
-          continue;
-        }
-
-        // Parse time range (e.g., "12:30 - 14:30")
-        const timeMatch = timeAttr.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
-        if (!timeMatch) {
-          logger.debug('Could not parse time from data-time', { timeAttr });
-          continue;
-        }
-
-        const startHour = timeMatch[1] ?? '00';
-        const startMin = timeMatch[2] ?? '00';
-        const endHour = timeMatch[3] ?? '00';
-        const endMin = timeMatch[4] ?? '00';
-
-        const startTime = `${startHour.padStart(2, '0')}:${startMin}`;
-        const endTime = `${endHour.padStart(2, '0')}:${endMin}`;
-
-        // Parse date
-        const date = new Date(currentDate + 'T00:00:00');
-        const dayOfWeek = date.getDay();
-
-        // Track days
-        const dateKey = currentDate;
-        if (dateKey && !seenDates.has(dateKey)) {
-          seenDates.add(dateKey);
-          daysChecked++;
-        }
-
-        // Parse price (e.g., "5,99 €")
-        let cost = 0;
-        if (priceAttr) {
-          const priceMatch = priceAttr.match(/(\d+(?:[.,]\d+)?)/);
-          if (priceMatch?.[1]) {
-            cost = parseFloat(priceMatch[1].replace(',', '.'));
-          }
-        }
-
-        // Parse status from data attributes
-        const isFree = isFreeAttr === 'true';
-        const hasSlots = hasSlotsAttr === 'true';
-        const isExpress = isExpressAttr === 'true';
-
-        let status: SlotStatus = 'unknown';
-        if (hasSlots) {
-          status = 'available';
-        } else {
-          status = 'full';
-        }
-
-        // Parse delivery type
-        const deliveryType: DeliveryType = isExpress ? 'express' : 'standard';
-
-        // Create slot
-        const slot: DeliverySlot = {
-          slotId: storeIdAttr ?? undefined,
-          date,
-          dayOfWeek,
-          startTime,
-          endTime,
-          status,
-          deliveryCost: isFree ? 0 : cost,
-          freeAboveThreshold: isFree,
-          deliveryType,
-        };
-
-        slots.push(slot);
-        logger.debug('Extracted slot from data attributes', {
-          time: timeAttr,
-          price: priceAttr,
-          isFree,
-          hasSlots,
-        });
       }
 
       // Look for minimum order value in page text

@@ -11,6 +11,7 @@ import type {
   SlotScoutConfig,
   RankedSlot,
 } from './types.js';
+import { getPortugueseDayName } from './types.js';
 
 /**
  * Default scoring weights
@@ -312,10 +313,16 @@ export function rankSlots(
   // Sort by overall score descending
   scored.sort((a, b) => b.score.overall - a.score.overall);
 
-  // Assign ranks
+  // Assign ranks and add convenience fields
   const ranked: RankedSlot[] = scored.map((item, index) => ({
     ...item,
     rank: index + 1,
+    // Convenience fields for display
+    dayName: getPortugueseDayName(item.slot.dayOfWeek),
+    startTime: item.slot.startTime,
+    endTime: item.slot.endTime,
+    price: item.slot.deliveryCost,
+    date: item.slot.date,
   }));
 
   return ranked;

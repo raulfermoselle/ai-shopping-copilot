@@ -6,7 +6,7 @@ Cart preparation agent for Auchan.pt grocery shopping. Reduces recurring ~2-hour
 
 ```
 ai-shopping-copilot/
-├── src/
+├── src/                  # Playwright-based agent implementation
 │   ├── agents/           # Agent implementations
 │   │   ├── coordinator/  # Orchestrates session, creates review pack
 │   │   ├── cart-builder/ # Loads/merges prior orders, favorites
@@ -17,8 +17,13 @@ ai-shopping-copilot/
 │   ├── memory/           # Memory/persistence layer
 │   ├── types/            # Shared TypeScript types
 │   └── utils/            # Shared utilities
+├── extension/            # Chrome Extension implementation (Manifest V3)
+│   ├── src/adapters/     # Chrome API adapters (storage, messaging, tabs)
+│   ├── src/core/         # Pure business logic (state machine, diff, scoring)
+│   ├── src/content-scripts/ # DOM extractors for Auchan.pt pages
+│   ├── src/entry/        # Service worker and content script entry points
+│   └── docs/             # Extension architecture documentation
 ├── tests/                # Test files
-├── config/               # Configuration files
 ├── scripts/              # Development scripts
 ├── docs/                 # Technical documentation
 └── Sprints/              # Sprint management

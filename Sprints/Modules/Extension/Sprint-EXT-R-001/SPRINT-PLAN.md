@@ -54,6 +54,7 @@ Replace Playwright browser automation with a Chrome Extension-based approach:
 - Background worker capabilities
 - Storage API options (sync, local, session)
 - Communication patterns between scripts
+- **Anthropic API integration from service worker** (CORS, API key storage, request patterns)
 
 **Acceptance Criteria**:
 - [x] Document created at `docs/extension-architecture-research.md`
@@ -155,6 +156,7 @@ Replace Playwright browser automation with a Chrome Extension-based approach:
 - Recommended architecture decision
 - Phase 2 planning prerequisites
 - Risk assessment and mitigation
+- **CLAUDE.md for Extension module** (per documentation-system.md requirements)
 
 **Acceptance Criteria**:
 - [x] All research compiled in `SPRINT-LOG.md`

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "lastValidated": "2026-01-11T22:30:00Z",
+  "lastValidated": "2026-01-14T06:19:44Z",
   "pages": {
     "login": {
       "name": "Login Page",
@@ -43,25 +43,25 @@
       "activeVersion": 1,
       "versions": [1],
       "lastValidation": {
-        "timestamp": "2026-01-11T00:00:00Z",
-        "status": "partial",
+        "timestamp": "2026-01-14T20:10:00Z",
+        "status": "valid",
         "failedSelectors": []
       },
-      "notes": "Shopping cart page. Empty cart verified. Item selectors based on Auchan patterns but NOT YET VERIFIED with actual cart items."
+      "notes": "VERIFIED: Shopping cart page with items. All 20 selectors verified against 03-cart-with-items.html snapshot. Includes product cards, prices, quantities, unavailable indicators, totals, and checkout button."
     },
     "search": {
       "name": "Product Search Results",
-      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/pesquisa",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/(pesquisa|search)",
       "activeVersion": 1,
       "versions": [1],
       "lastValidation": {
-        "timestamp": "2026-01-11T22:30:00Z",
+        "timestamp": "2026-01-14T06:19:44Z",
         "status": "valid",
         "failedSelectors": [
-          "unavailableIndicator"
+          "outOfStockIndicator"
         ]
       },
-      "notes": "Product search results page. Shows grid of product tiles. URL format: /pt/pesquisa?q={query}. Tested with queries 'leite' and 'azeite'. unavailableIndicator NOT VERIFIED (no out-of-stock products in test results)."
+      "notes": "VERIFIED: Product search results page. Shows grid of product tiles with rich data attributes (data-pid, data-urls, data-gtm). URL format: /pt/pesquisa?q={query}. Tested with 'leite' query (1,059 results, 24 products captured). Key features: searchInput, productTile with data-pid, addToCartButton, quantity selector, price breakdown (main/promo/unit). outOfStockIndicator NOT VERIFIED (all test products were available)."
     },
     "product-detail": {
       "name": "Product Detail Page",
@@ -82,6 +82,18 @@
         ]
       },
       "notes": "Product detail page with full information and recommendations. URL format: /pt/{category-path}/{product-slug}/{pid}.html. Tested with leite and azeite products. Shows 'A Auchan sugere isto...' recommendations section with similar products. Several selectors NOT VERIFIED (only tested with available products)."
+    },
+    "delivery-slots": {
+      "name": "Delivery Slot Selection",
+      "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/(checkout|escolher-horario|entrega)",
+      "activeVersion": 1,
+      "versions": [1],
+      "lastValidation": {
+        "timestamp": "2026-01-14T06:00:00Z",
+        "status": "valid",
+        "failedSelectors": []
+      },
+      "notes": "Delivery slot selection page in checkout flow. Selectors verified with €260+ cart. Uses data attributes: data-time, data-price, data-is-free, data-has-slots-to-book. Day tabs with data-date. Time extraction from innerText when data-time is null."
     }
   }
 }

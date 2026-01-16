@@ -30,28 +30,6 @@ function parseCurrency(text: string): number {
   return isNaN(value) ? 0 : value;
 }
 
-/**
- * Extract product ID from URL
- * URL format: https://www.auchan.pt/pt/produtos/ID or /pt/algo/ID
- */
-function extractProductId(url: string): string {
-  // Try to extract from various URL patterns
-  const patterns = [
-    /\/produtos\/([a-zA-Z0-9-]+)/,
-    /\/([a-zA-Z0-9-]+)(?:\?|$)/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match?.[1]) {
-      return match[1];
-    }
-  }
-
-  // Fallback: use last path segment
-  const segments = url.split('/').filter(Boolean);
-  return segments[segments.length - 1]?.split('?')[0] || '';
-}
 
 /**
  * Search Products Tool
@@ -149,15 +127,12 @@ export const searchProductsTool: Tool<SearchProductsInput, SearchProductsOutput>
         };
       }
 
-      // Extract product cards
+      // Extract product cards - use VERIFIED selectors from registry
       const productCardSelectors = [
-        resolver.buildCompositeSelector('search', 'productCard'),
-        '.auc-product-card',
-        '.product-card',
-        '[class*="product-card"]',
-        '[class*="product-tile"]',
-        'article[class*="product"]',
-        '.product-item',
+        resolver.buildCompositeSelector('search', 'productTile'),
+        '.product-tile[data-pid]',
+        '.auc-product-tile[data-pid]',
+        '[data-pid]:has(.auc-product-tile__name)',
       ].filter(Boolean).join(', ');
 
       const productElements = await context.page.locator(productCardSelectors).all();
@@ -185,187 +160,136 @@ export const searchProductsTool: Tool<SearchProductsInput, SearchProductsOutput>
         // Count element not found, use actual count
       }
 
-      // Extract product information
+      // Extract product information via fast JavaScript evaluation (NOT slow Playwright locators)
+      const maxToExtract = input.maxResults ?? 10;
+
+      interface RawProduct {
+        pid: string;
+        name: string;
+        href: string | null;
+        priceText: string | null;
+        pricePerUnit: string | null;
+        brand: string | null;
+        imageUrl: string | null;
+        hasDisabledButton: boolean;
+        hasOutOfStock: boolean;
+      }
+
+      // Use string evaluation to avoid TypeScript DOM type issues (runs in browser context)
+      const rawProducts = await context.page.evaluate(`
+        (function() {
+          var max = ${maxToExtract};
+          var tiles = document.querySelectorAll('.product-tile[data-pid], .auc-product-tile[data-pid], [data-pid]:has(.auc-product-tile__name)');
+          var results = [];
+
+          for (var i = 0; i < Math.min(tiles.length, max); i++) {
+            var tile = tiles[i];
+            if (!tile) continue;
+
+            // Get product ID from data attribute
+            var pid = tile.getAttribute('data-pid') || ('search-' + i);
+
+            // Get product name
+            var nameEl = tile.querySelector('.auc-product-tile__name, .product-name');
+            var name = nameEl ? (nameEl.textContent || '').trim() : '';
+            if (!name) continue;
+
+            // Get product URL
+            var linkEl = tile.querySelector('a[href*="/produtos/"], a[href*="/pt/"]');
+            var href = linkEl ? linkEl.getAttribute('href') : null;
+
+            // Get price - try multiple selectors
+            var priceText = null;
+            var priceEl = tile.querySelector('.auc-price__no-list .value, .auc-product-tile__prices .price .value, .auc-product-tile__prices .value');
+            if (priceEl) {
+              priceText = (priceEl.textContent || '').trim() || null;
+            }
+
+            // Get price per unit
+            var perUnitEl = tile.querySelector('.price-per-unit, .unit-price, [class*="per-unit"], [class*="price-unit"]');
+            var pricePerUnit = perUnitEl ? (perUnitEl.textContent || '').trim() : null;
+
+            // Get brand
+            var brandEl = tile.querySelector('.auc-product__brand, .product-brand, .brand');
+            var brand = brandEl ? (brandEl.textContent || '').trim() : null;
+
+            // Get image URL
+            var imgEl = tile.querySelector('img');
+            var imageUrl = imgEl ? imgEl.getAttribute('src') : null;
+            if (!imageUrl || imageUrl.indexOf('placeholder') >= 0) {
+              imageUrl = imgEl ? imgEl.getAttribute('data-src') : null;
+            }
+
+            // Check availability
+            var hasDisabledButton = !!tile.querySelector('button[disabled], button.auc-button__rounded--primary[disabled]');
+            var hasOutOfStock = tile.classList.contains('out-of-stock') || !!tile.querySelector('.out-of-stock');
+
+            results.push({
+              pid: pid,
+              name: name,
+              href: href,
+              priceText: priceText,
+              pricePerUnit: pricePerUnit,
+              brand: brand,
+              imageUrl: imageUrl,
+              hasDisabledButton: hasDisabledButton,
+              hasOutOfStock: hasOutOfStock
+            });
+          }
+
+          return results;
+        })()
+      `) as RawProduct[];
+
+      context.logger.info('Extracted products via JS', { count: rawProducts.length });
+
+      // Process raw products into SubstituteCandidate objects
       const products: SubstituteCandidate[] = [];
-      const maxToExtract = Math.min(productElements.length, input.maxResults ?? 10);
 
-      for (let i = 0; i < maxToExtract; i++) {
-        const productElement = productElements[i];
-        if (!productElement) continue;
+      for (const raw of rawProducts) {
+        // Determine availability
+        const available = !raw.hasDisabledButton && !raw.hasOutOfStock;
 
-        try {
-          // Extract product name
-          const nameSelectors = [
-            resolver.buildCompositeSelector('search', 'productName'),
-            '.auc-product__name',
-            '.product-name',
-            '.product-title',
-            'h2, h3, h4',
-            'a[href*="/produtos/"]',
-          ].filter(Boolean).join(', ');
-
-          const nameElement = await productElement.locator(nameSelectors).first();
-          const name = (await nameElement.textContent())?.trim() || '';
-
-          if (!name) {
-            context.logger.debug('Skipping product without name', { index: i });
-            continue;
-          }
-
-          // Extract product URL
-          let productUrl: string | undefined;
-          try {
-            const linkElement = await productElement.locator('a[href*="/produtos/"], a[href*="/pt/"]').first();
-            const href = await linkElement.getAttribute('href');
-            if (href) {
-              productUrl = href.startsWith('http') ? href : `https://www.auchan.pt${href}`;
-            }
-          } catch {
-            productUrl = undefined;
-          }
-
-          const productId = productUrl ? extractProductId(productUrl) : `search-${i}`;
-
-          // Extract price
-          let unitPrice = 0;
-          try {
-            const priceSelectors = [
-              resolver.buildCompositeSelector('search', 'productPrice'),
-              '.auc-product__price',
-              '.product-price',
-              '.price',
-              '[class*="price"]',
-            ].filter(Boolean).join(', ');
-
-            const priceElement = await productElement.locator(priceSelectors).first();
-            const priceText = await priceElement.textContent();
-            if (priceText) {
-              unitPrice = parseCurrency(priceText);
-            }
-          } catch {
-            // Price not found
-          }
-
-          // Extract price per unit (e.g., "2,50€/kg")
-          let pricePerUnit: string | undefined;
-          try {
-            const perUnitSelectors = [
-              resolver.buildCompositeSelector('search', 'pricePerUnit'),
-              '.price-per-unit',
-              '.unit-price',
-              '[class*="per-unit"]',
-              '[class*="price-unit"]',
-            ].filter(Boolean).join(', ');
-
-            const perUnitElement = await productElement.locator(perUnitSelectors).first();
-            pricePerUnit = (await perUnitElement.textContent())?.trim();
-          } catch {
-            // Per unit price not found
-          }
-
-          // Extract brand
-          let brand: string | undefined;
-          try {
-            const brandSelectors = [
-              resolver.buildCompositeSelector('search', 'productBrand'),
-              '.auc-product__brand',
-              '.product-brand',
-              '.brand',
-              '[class*="brand"]',
-            ].filter(Boolean).join(', ');
-
-            const brandElement = await productElement.locator(brandSelectors).first();
-            brand = (await brandElement.textContent())?.trim();
-          } catch {
-            // Brand not found
-          }
-
-          // Extract size/weight
-          let size: string | undefined;
-          try {
-            const sizeSelectors = [
-              resolver.buildCompositeSelector('search', 'productSize'),
-              '.auc-product__size',
-              '.product-size',
-              '.weight',
-              '[class*="size"]',
-              '[class*="weight"]',
-            ].filter(Boolean).join(', ');
-
-            const sizeElement = await productElement.locator(sizeSelectors).first();
-            size = (await sizeElement.textContent())?.trim();
-          } catch {
-            // Size not found - try to extract from name
-            const sizeMatch = name.match(/(\d+(?:,\d+)?\s*(?:g|kg|ml|l|cl|un|unidades))/i);
-            if (sizeMatch?.[1]) {
-              size = sizeMatch[1];
-            }
-          }
-
-          // Extract image URL
-          let imageUrl: string | undefined;
-          try {
-            const imgElement = await productElement.locator('img').first();
-            imageUrl = await imgElement.getAttribute('src') || undefined;
-            // Handle lazy loading
-            if (!imageUrl || imageUrl.includes('placeholder')) {
-              imageUrl = await imgElement.getAttribute('data-src') || undefined;
-            }
-          } catch {
-            // Image not found
-          }
-
-          // Check availability
-          let available = true;
-          try {
-            const unavailableSelectors = [
-              resolver.buildCompositeSelector('search', 'unavailableIndicator'),
-              '.unavailable',
-              '.out-of-stock',
-              '.esgotado',
-              '[class*="unavailable"]',
-              '[class*="esgotado"]',
-              'button[disabled]:has-text("Esgotado")',
-            ].filter(Boolean).join(', ');
-
-            const unavailableElement = await productElement.locator(unavailableSelectors).first();
-            const hasUnavailable = await unavailableElement.isVisible().catch(() => false);
-            available = !hasUnavailable;
-          } catch {
-            // Assume available if check fails
-          }
-
-          // Filter out unavailable if requested
-          if (input.availableOnly && !available) {
-            context.logger.debug('Skipping unavailable product', { name });
-            continue;
-          }
-
-          const product: SubstituteCandidate = {
-            productId,
-            name,
-            productUrl,
-            unitPrice,
-            pricePerUnit,
-            imageUrl,
-            brand,
-            size,
-            available,
-          };
-
-          products.push(product);
-          context.logger.debug('Extracted product', {
-            name,
-            price: unitPrice,
-            available,
-          });
-        } catch (err) {
-          context.logger.warn('Failed to extract product', {
-            index: i,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          // Continue with next product
+        // Filter out unavailable if requested
+        if (input.availableOnly && !available) {
+          context.logger.debug('Skipping unavailable product', { name: raw.name });
+          continue;
         }
+
+        // Build product URL
+        let productUrl: string | undefined;
+        if (raw.href) {
+          productUrl = raw.href.startsWith('http') ? raw.href : `https://www.auchan.pt${raw.href}`;
+        }
+
+        // Parse price
+        const unitPrice = raw.priceText ? parseCurrency(raw.priceText) : 0;
+
+        // Extract size from product name if not found separately
+        let size: string | undefined;
+        const sizeMatch = raw.name.match(/(\d+(?:,\d+)?\s*(?:g|kg|ml|l|cl|un|unidades))/i);
+        if (sizeMatch?.[1]) {
+          size = sizeMatch[1];
+        }
+
+        const product: SubstituteCandidate = {
+          productId: raw.pid,
+          name: raw.name,
+          productUrl,
+          unitPrice,
+          pricePerUnit: raw.pricePerUnit || undefined,
+          imageUrl: raw.imageUrl || undefined,
+          brand: raw.brand || undefined,
+          size,
+          available,
+        };
+
+        products.push(product);
+        context.logger.debug('Extracted product', {
+          name: raw.name,
+          price: unitPrice,
+          available,
+        });
       }
 
       // Capture screenshot

@@ -445,11 +445,11 @@ export function calculateBrandPatterns(
  */
 export function findBrandPattern(
   patterns: BrandTolerancePattern[],
-  category: string,
+  category: string | undefined,
   fromBrand: string | undefined,
   toBrand: string | undefined
 ): BrandTolerancePattern | undefined {
-  if (!fromBrand || !toBrand) return undefined;
+  if (!category || !fromBrand || !toBrand) return undefined;
 
   const normalizedCategory = category.toLowerCase();
   const normalizedFrom = fromBrand.toLowerCase();

@@ -31,8 +31,17 @@ import { SubstitutionWorkerConfigSchema } from './types.js';
 import {
   checkAvailabilityTool,
   searchProductsTool,
+  navigateToReplacementsPageTool,
+  generateSearchQueries,
 } from './tools/index.js';
 // extractProductInfoTool reserved for Phase 2+ detailed product info extraction
+
+// Import LLM enhancer
+import {
+  SubstitutionLLMEnhancer,
+  createSubstitutionLLMEnhancer,
+  type SubstitutionLLMEnhancerConfig,
+} from './llm-enhancer.js';
 
 // Import learning module
 import type {
@@ -125,6 +134,9 @@ export class Substitution {
   /** Whether learning is enabled */
   private learningEnabled: boolean;
 
+  /** LLM enhancer for value-based ranking (optional) */
+  private llmEnhancer: SubstitutionLLMEnhancer | null = null;
+
   constructor(
     config: Partial<SubstitutionWorkerConfig> = {},
     options?: {
@@ -181,6 +193,38 @@ export class Substitution {
    */
   isLearningEnabled(): boolean {
     return this.learningEnabled;
+  }
+
+  /**
+   * Enable LLM enhancement for value-based substitute ranking.
+   * This uses Claude to analyze substitutes with value heuristics:
+   * - Store brand preference (Auchan/Polegar)
+   * - Price-per-unit optimization (€/kg, €/L)
+   * - Price tolerance enforcement (max 20% increase)
+   */
+  enableLLMEnhancement(config: Partial<SubstitutionLLMEnhancerConfig>): void {
+    this.llmEnhancer = createSubstitutionLLMEnhancer(config);
+  }
+
+  /**
+   * Disable LLM enhancement.
+   */
+  disableLLMEnhancement(): void {
+    this.llmEnhancer = null;
+  }
+
+  /**
+   * Check if LLM enhancement is enabled and available.
+   */
+  isLLMEnhancementAvailable(): boolean {
+    return this.llmEnhancer?.isAvailable() ?? false;
+  }
+
+  /**
+   * Get the LLM enhancer (for direct access if needed).
+   */
+  getLLMEnhancer(): SubstitutionLLMEnhancer | null {
+    return this.llmEnhancer;
   }
 
   /**
@@ -437,6 +481,10 @@ export class Substitution {
 
   /**
    * Find substitutes for an unavailable item.
+   *
+   * Two-phase strategy:
+   * 1. First, try Auchan's "Substituir" link (preferred - curated suggestions)
+   * 2. If that fails, fall back to search query (with optional LLM-powered query generation)
    */
   private async findSubstitutes(
     toolContext: ToolContext,
@@ -445,28 +493,135 @@ export class Substitution {
     config: SubstitutionWorkerConfig
   ): Promise<SubstitutionResult> {
     const searchedAt = new Date();
+    let candidates: SubstituteCandidate[] = [];
+    let searchQuery = '';
+    let sourceMethod: 'replacement_link' | 'search' | 'llm_search' = 'search';
 
-    // Build search query from product name
-    // Remove brand and size to get more general results
-    const searchQuery = this.buildSearchQuery(unavailableItem.productName);
+    // ===========================================================================
+    // Phase 1: Try Auchan's "Substituir" link (preferred)
+    // ===========================================================================
+    // Note: This requires the replacement URL to be extracted from the cart.
+    // For now, we can check if the product has a known category URL.
+    // Full integration requires check-availability.ts to extract the Substituir link.
 
-    toolContext.logger.info('Searching for substitutes', {
-      originalName: unavailableItem.productName,
-      searchQuery,
-    });
+    const hasReplacementUrl = false; // TODO: Extract from checkAvailabilityTool in future
+    const replacementUrl = undefined; // Will come from AvailabilityResult.replacementUrl
 
-    // Search for products
-    const searchResult = await searchProductsTool.execute(
-      {
-        query: searchQuery,
-        maxResults: config.maxSubstitutesPerItem * 2, // Get extra for filtering
-        availableOnly: true,
-        timeout: config.searchTimeout,
-      },
-      toolContext
-    );
+    if (hasReplacementUrl && replacementUrl) {
+      toolContext.logger.info('Trying Auchan replacement suggestions', {
+        productId: unavailableItem.productId,
+        productName: unavailableItem.productName,
+      });
 
-    if (!searchResult.success || !searchResult.data || searchResult.data.products.length === 0) {
+      const replacementResult = await navigateToReplacementsPageTool.execute(
+        {
+          productId: unavailableItem.productId,
+          productName: unavailableItem.productName,
+          replacementUrl: replacementUrl,
+          maxResults: config.maxSubstitutesPerItem * 2,
+          availableOnly: true,
+          timeout: config.searchTimeout,
+        },
+        toolContext
+      );
+
+      if (replacementResult.success && replacementResult.data && replacementResult.data.products.length > 0) {
+        candidates = replacementResult.data.products.filter(
+          (p) => p.productId !== unavailableItem.productId && p.available
+        );
+        sourceMethod = 'replacement_link';
+
+        toolContext.logger.info('Found candidates via replacement link', {
+          productName: unavailableItem.productName,
+          candidatesFound: candidates.length,
+          categoryUrl: replacementResult.data.categoryUrl,
+        });
+      }
+    }
+
+    // ===========================================================================
+    // Phase 2: Fall back to search if no replacement link or no results
+    // ===========================================================================
+    if (candidates.length === 0) {
+      // Build search query from product name
+      searchQuery = this.buildSearchQuery(unavailableItem.productName);
+
+      toolContext.logger.info('Searching for substitutes', {
+        originalName: unavailableItem.productName,
+        searchQuery,
+      });
+
+      // Search for products
+      const searchResult = await searchProductsTool.execute(
+        {
+          query: searchQuery,
+          maxResults: config.maxSubstitutesPerItem * 2, // Get extra for filtering
+          availableOnly: true,
+          timeout: config.searchTimeout,
+        },
+        toolContext
+      );
+
+      if (searchResult.success && searchResult.data && searchResult.data.products.length > 0) {
+        candidates = searchResult.data.products.filter(
+          (p) => p.productId !== unavailableItem.productId && p.available
+        );
+      }
+
+      // ===========================================================================
+      // Phase 2b: LLM-powered query generation (fallback if simple search fails)
+      // ===========================================================================
+      if (candidates.length === 0 && this.llmEnhancer?.isAvailable()) {
+        toolContext.logger.info('Simple search failed, trying LLM query generation', {
+          productName: unavailableItem.productName,
+          previousQuery: searchQuery,
+        });
+
+        const llmClient = this.llmEnhancer.getClient();
+        if (llmClient) {
+          const queryResult = await generateSearchQueries(
+            {
+              productName: unavailableItem.productName,
+              ...(originalInput?.brand !== undefined && { brand: originalInput.brand }),
+              previousQuery: searchQuery,
+              previousResultCount: 0,
+            },
+            llmClient
+          );
+
+          // Try each LLM-generated query until we find results
+          for (const llmQuery of queryResult.queries) {
+            if (llmQuery === searchQuery) continue; // Skip if same as original
+
+            toolContext.logger.info('Trying LLM-generated query', { query: llmQuery });
+
+            const llmSearchResult = await searchProductsTool.execute(
+              {
+                query: llmQuery,
+                maxResults: config.maxSubstitutesPerItem * 2,
+                availableOnly: true,
+                timeout: config.searchTimeout,
+              },
+              toolContext
+            );
+
+            if (llmSearchResult.success && llmSearchResult.data && llmSearchResult.data.products.length > 0) {
+              candidates = llmSearchResult.data.products.filter(
+                (p) => p.productId !== unavailableItem.productId && p.available
+              );
+              searchQuery = llmQuery;
+              sourceMethod = 'llm_search';
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // ===========================================================================
+    // No candidates found
+    // ===========================================================================
+    if (candidates.length === 0) {
       toolContext.logger.info('No substitutes found', {
         productName: unavailableItem.productName,
         searchQuery,
@@ -485,11 +640,9 @@ export class Substitution {
       };
     }
 
-    // Filter and rank candidates
-    const candidates = searchResult.data.products.filter(
-      (p) => p.productId !== unavailableItem.productId && p.available
-    );
-
+    // ===========================================================================
+    // Rank candidates
+    // ===========================================================================
     const rankedSubstitutes = this.rankSubstitutes(
       candidates,
       unavailableItem,
@@ -504,6 +657,7 @@ export class Substitution {
       productName: unavailableItem.productName,
       candidatesFound: candidates.length,
       topSubstitutes: topSubstitutes.length,
+      sourceMethod,
     });
 
     return {
