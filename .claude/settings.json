@@ -1,0 +1,56 @@
+{
+  "$schema": "https://claude.ai/schemas/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File ./.claude/scripts/validate-command.ps1"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "sprint-executor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File ./.claude/scripts/log-session-start.ps1"
+          }
+        ]
+      },
+      {
+        "matcher": "test-runner",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo Test runner agent started"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "sprint-executor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File ./.claude/scripts/log-session-end.ps1"
+          }
+        ]
+      },
+      {
+        "matcher": "test-runner",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo Test runner agent completed"
+          }
+        ]
+      }
+    ]
+  }
+}
