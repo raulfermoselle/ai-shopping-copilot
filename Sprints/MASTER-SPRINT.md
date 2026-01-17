@@ -7,7 +7,7 @@
 
 | Field | Value |
 |-------|-------|
-| Last Updated | 2026-01-16 (Sprint-EXT-A-001 completed) |
+| Last Updated | 2026-01-17 (Sprint-EXT-I-002 created) |
 | Project Version | 0.2.0 |
 | Framework Version | 3.0.0 |
 | Overall Status | Phase 2 In Progress |
@@ -42,7 +42,7 @@
 | SlotScout | SS-R-001 (60%) | - | - | Blocked |
 | StockPruner | - | - | - | Not Started |
 | ControlPanel | - | - | - | Unblocked |
-| Extension | EXT-R-001 | EXT-A-001 | EXT-P-001, EXT-I-001 | Planning Phase |
+| Extension | EXT-R-001 | EXT-A-001 | EXT-P-001, EXT-I-001, EXT-I-002 | Implementation Phase |
 
 ---
 
@@ -52,7 +52,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
-| feat/chrome-extension | Sprint-EXT-P-001 | Active | 2026-01-16 | 2026-01-16 |
+| feat/chrome-extension | Sprint-EXT-I-002 | Ready to Start | 2026-01-17 | 2026-01-17 |
 | main | None | Idle | - | 2026-01-16 |
 
 ---
@@ -61,9 +61,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Sprints | 11 |
+| Total Sprints | 12 |
 | Completed | 10 |
 | Blocked | 1 |
+| Ready to Start | 1 |
 | Test Count | 415+ |
 
 > **Note**: Per-branch metrics (deadlock counter, session state) are stored in `.sprint-state.local`
@@ -73,7 +74,7 @@
 ## Sprint Queue (Prioritized)
 
 ### Priority 1 (Active/Ready to Start)
-- **Sprint-EXT-P-001**: Extension MVP Planning (ACTIVE - translating architecture to tasks)
+- **Sprint-EXT-I-002**: Extension Button - Merge Last 3 Orders (READY - 12 tasks, 15 points)
 - **Sprint-SU-A-001**: Substitution Architecture (research complete, ready to start)
 - **Sprint-CP-I-001**: Control Panel Implementation (unblocked by CO-I-001)
 
@@ -81,6 +82,8 @@
 - **Sprint-SS-R-001**: SlotScout Research (60% complete, awaiting user manual research)
 
 ### Backlog
+- Sprint-EXT-I-003: Extension additional features (after EXT-I-002)
+- Sprint-SU-A-001: Substitution Architecture (research complete, ready to start)
 - Sprint-SU-I-001: Substitution Implementation (needs SU-A-001)
 - Sprint-SS-A-001: SlotScout Architecture (needs SS-R-001)
 - Sprint-SS-I-001: SlotScout Implementation (needs SS-A-001)
@@ -159,15 +162,18 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 ## Notes for Current Session
 
 - **Phase 1 Foundation Complete** - All 7 foundation sprints finished
-- **Phase 2 In Progress** - Substitution research done, SlotScout blocked
-- **Phase 2 Extension Planning Active** - Sprint-EXT-P-001 translating architecture to implementation tasks
-- **Currently Active (Priority 1)**:
-  - **Sprint-EXT-P-001** - Extension MVP Planning (ACTIVE)
-  - **Sprint-SU-A-001** - Substitution Architecture (ready)
-  - **Sprint-CP-I-001** - Control Panel Implementation (ready)
-- **Queued After Planning**: Sprint-EXT-I-001, I-002, I-003 (implementation sprints)
+- **Phase 2 In Progress** - Extension MVP implementation starting
+- **Phase 2 Extension Implementation** - Sprint-EXT-I-002 ready to start
+- **Currently Ready (Priority 1)**:
+  - **Sprint-EXT-I-002** - Extension Button - Merge Last 3 Orders (READY TO START)
+    - 12 tasks, 15 story points
+    - 4 phases: Setup, Foundation, Core, Polish
+    - Feature: 001-extension-merge-orders
+  - **Sprint-SU-A-001** - Substitution Architecture (ready to start)
+  - **Sprint-CP-I-001** - Control Panel Implementation (ready to start)
+- **Next in Queue**: Sprint-EXT-I-003 (additional features after I-002)
 - **Blocked**: SS-R-001 needs user to manually research delivery slot page
 
 ---
 
-*Last Updated: 2026-01-16 (Sprint-EXT-A-001 Completed)*
+*Last Updated: 2026-01-17 (Sprint-EXT-I-002 Created)*
