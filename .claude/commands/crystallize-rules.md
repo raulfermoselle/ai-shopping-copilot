@@ -1,6 +1,6 @@
-# /commit-knowledge
+# /crystallize-rules
 
-Crystallize durable understanding from this session into enforceable rules.
+Crystallize durable insights from this session into enforceable rules.
 
 ## Instructions
 
@@ -33,7 +33,7 @@ For each insight, ask: "Will this still matter in 5 sessions? In 10?"
 - Safety-related (what prevents breakage)
 
 **Discard** insights that are:
-- About this specific bug (already fixed)
+- About a specific bug (already fixed)
 - About temporary workarounds
 - About features still in flux
 - Historical context that explains "why we did X" rather than "always do X"
@@ -136,7 +136,7 @@ For each rule:
 Output a summary in this format:
 
 ```
-## Knowledge Committed
+## Rules Crystallized
 
 ### General Principles Added
 - **[Principle Name]**: "[Principle statement]" — *[Source]*
@@ -150,7 +150,7 @@ Output a summary in this format:
 - "[Directive text]" → *[Parent Principle]*
 
 ---
-Total: N principles, M directives committed to CLAUDE.md
+Total: N principles, M directives crystallized into CLAUDE.md
 ```
 
 ## Constraints
@@ -159,5 +159,5 @@ Total: N principles, M directives committed to CLAUDE.md
 - **Never include rationale** — the rule stands alone
 - **Never reference the session** — rules are timeless
 - **Never write "lessons learned"** — rules are not retrospective
-- **If nothing durable emerged** — report "No durable knowledge to commit" and exit
+- **If nothing durable emerged** — report "No durable rules to crystallize" and exit
 - **Err on the side of fewer, stronger rules** — one good rule beats three weak ones
