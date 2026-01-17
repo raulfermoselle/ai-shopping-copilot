@@ -99,6 +99,71 @@ See `src/types/messages.ts` for full protocol.
 2. **No password storage**: User logs in manually; extension detects
 3. **Content script isolation**: Cannot access page JS, only DOM
 4. **Manifest V3**: Use service workers, not background pages
+5. **Message action constants**: Never hardcode action strings. Import from `src/types/messages.ts`:
+   ```typescript
+   // CORRECT: Import from messages.ts
+   import type { MessageAction } from '../src/types/messages.js';
+   const ACTIONS = {
+     GET_STATE: 'state.get' as const satisfies MessageAction,
+   };
+
+   // WRONG: Hardcoded strings cause mismatches
+   await chrome.runtime.sendMessage({ action: 'getState' }); // INVALID_REQUEST error
+   ```
+
+## Autonomous Debug Logging
+
+All extension components log to a centralized debug server that writes to `extension/logs/debug.log`. This enables Claude Code to autonomously debug issues.
+
+### Setup
+
+```bash
+# Terminal 1: Start debug server
+cd extension
+npm run logs
+
+# Terminal 2: Build and watch
+npm run build:watch
+```
+
+### Log File Location
+
+Logs written to: `extension/logs/debug.log`
+
+To tail logs:
+```bash
+tail -f extension/logs/debug.log
+```
+
+### Logger Usage
+
+All components must use the centralized logger from `src/utils/logger.ts`:
+
+```typescript
+import { logger } from '../utils/logger.js';
+
+logger.info('ComponentName', 'Action description', { contextData });
+logger.warn('ComponentName', 'Warning message', { details });
+logger.error('ComponentName', 'Error description', error);
+```
+
+**Components using logger:**
+- Service Worker (`SW`)
+- Content Script (`ContentScript`)
+- Popup (`Popup`)
+
+### How It Works
+
+1. Logger POSTs JSON to `http://localhost:9222/log`
+2. Debug server (scripts/debug-server.mjs) writes to `logs/debug.log`
+3. Fallback: Also stores in `chrome.storage.local` if server unavailable
+4. Log rotation at 1MB
+
+### Debug Server Endpoints
+
+- `POST /log` - Single log entry
+- `POST /logs` - Batch log entries
+- `GET /health` - Health check
 
 ## Documentation
 

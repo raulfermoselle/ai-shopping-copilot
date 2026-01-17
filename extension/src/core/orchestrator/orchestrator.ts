@@ -462,7 +462,14 @@ export class RunOrchestrator {
   // ===========================================================================
 
   /**
-   * Cart phase: Load orders, reorder, scan cart
+   * Cart phase: Load orders, merge last 3 orders, scan cart
+   *
+   * Multi-order merge flow:
+   * 1. Load order history
+   * 2. Take last 3 orders, sort oldest-to-newest
+   * 3. Reorder each: first with 'replace', rest with 'merge'
+   * 4. Scan final cart
+   * 5. Compute diff for unavailable items
    */
   private async executeCartPhase(): Promise<void> {
     const { stateMachine } = this.deps;
@@ -473,28 +480,53 @@ export class RunOrchestrator {
 
     // Step 1: Load order history
     this.updateStep('loading-orders');
-    const orders = await this.loadOrderHistory();
-    this.context.orderHistory = orders;
+    const allOrders = await this.loadOrderHistory();
+
+    // Take up to 3 orders for merging
+    const ordersToMerge = allOrders.slice(0, 3);
+    this.context.orderHistory = ordersToMerge;
 
     stateMachine.dispatch({
       type: 'PROGRESS_UPDATE',
       payload: {
-        ordersLoaded: orders.length,
-        ordersTotal: orders.length,
+        ordersLoaded: ordersToMerge.length,
+        ordersTotal: ordersToMerge.length,
       },
     });
 
-    // Step 2: Select order to reorder (most recent by default)
+    // Step 2: Sort orders oldest-to-newest for merge sequence
     this.updateStep('selecting-order');
-    const selectedOrder = orders[0] ?? null;
-    this.context.selectedOrder = selectedOrder;
+    const sortedOrders = [...ordersToMerge].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateA - dateB; // Oldest first
+    });
 
-    if (!selectedOrder) {
+    // Store the most recent order as the "selected" order (for reference)
+    this.context.selectedOrder = ordersToMerge[0] ?? null;
+
+    if (sortedOrders.length === 0) {
       this.log('No orders found - proceeding with current cart');
     } else {
-      // Step 3: Reorder the selected order
-      this.updateStep('reordering');
-      await this.reorderOrder(selectedOrder.orderId);
+      // Step 3: Reorder each order in sequence
+      // First order uses 'replace' mode (starts fresh cart)
+      // Subsequent orders use 'merge' mode (adds to existing cart)
+      for (let i = 0; i < sortedOrders.length; i++) {
+        const order = sortedOrders[i]!;
+        const mode = i === 0 ? 'replace' : 'merge';
+
+        this.updateStep('reordering');
+        stateMachine.dispatch({
+          type: 'PROGRESS_UPDATE',
+          payload: {
+            itemsProcessed: i + 1,
+            itemsTotal: sortedOrders.length,
+          },
+        });
+
+        this.log(`Merging order ${i + 1}/${sortedOrders.length} (${order.orderId}) with mode: ${mode}`);
+        await this.reorderOrder(order.orderId, mode);
+      }
     }
 
     // Step 4: Scan current cart
@@ -521,7 +553,7 @@ export class RunOrchestrator {
       },
     });
 
-    this.log(`Cart phase complete: ${cartItems.length} items, ${unavailable.length} unavailable`);
+    this.log(`Cart phase complete: ${sortedOrders.length} orders merged, ${cartItems.length} items, ${unavailable.length} unavailable`);
   }
 
   /**
@@ -556,8 +588,11 @@ export class RunOrchestrator {
 
   /**
    * Reorder a specific order
+   *
+   * @param orderId - The order ID to reorder
+   * @param mode - 'replace' clears cart first, 'merge' adds to existing cart
    */
-  private async reorderOrder(orderId: string): Promise<void> {
+  private async reorderOrder(orderId: string, mode: 'replace' | 'merge' = 'replace'): Promise<void> {
     if (!this.context) {
       throw new Error('Run context not initialized');
     }
@@ -566,7 +601,7 @@ export class RunOrchestrator {
     const response = await this.sendToTab(
       this.context.tabId,
       'order.reorder',
-      { orderId, mode: 'replace' }
+      { orderId, mode }
     );
 
     if (!response.success) {

@@ -15,6 +15,7 @@ import { detectLoginState, isOnLoginPage, isLoginButtonVisible } from '../conten
 import { extractOrderHistory, isOnOrderHistoryPage, getOrderCount } from '../content-scripts/extractors/order-history.js';
 import { extractCartItems, isOnCartPage, hasCartItems } from '../content-scripts/extractors/cart-scanner.js';
 import { extractDeliverySlots, extractAllDaysSlots, isOnSlotsPage } from '../content-scripts/extractors/slot-extractor.js';
+import { logger } from '../utils/logger.js';
 
 import type {
   ExtensionMessage,
@@ -43,7 +44,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
       sendResponse({ ...result, timing });
     })
     .catch((error) => {
-      console.error('[ContentScript] Message handling error:', error);
+      logger.error('ContentScript', 'Message handling error', error);
       sendResponse(
         createErrorResponse(
           message.id,
@@ -62,7 +63,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
  * Route message to appropriate handler based on action
  */
 async function handleMessage(message: ExtensionMessage): Promise<ExtensionResponse> {
-  console.log('[ContentScript] Handling message:', message.action, message);
+  logger.info('ContentScript', 'Handling message', { action: message.action, message });
 
   try {
     switch (message.action) {
@@ -92,7 +93,7 @@ async function handleMessage(message: ExtensionMessage): Promise<ExtensionRespon
         );
     }
   } catch (error) {
-    console.error('[ContentScript] Handler error:', error);
+    logger.error('ContentScript', 'Handler error', error);
     return createErrorResponse(
       message.id,
       'UNKNOWN',
@@ -278,7 +279,7 @@ function handleReorderModal(mode: 'replace' | 'add'): void {
     const modal = document.querySelector('.modal.show, [role="dialog"]');
 
     if (!modal) {
-      console.warn('[ContentScript] Reorder modal not found. It may appear later.');
+      logger.warn('ContentScript', 'Reorder modal not found. It may appear later.');
       return;
     }
 
@@ -305,13 +306,13 @@ function handleReorderModal(mode: 'replace' | 'add'): void {
     }
 
     if (targetButton) {
-      console.log(`[ContentScript] Clicking ${mode} button in modal`);
+      logger.info('ContentScript', `Clicking ${mode} button in modal`);
       targetButton.click();
     } else {
-      console.warn(`[ContentScript] Could not find ${mode} button in modal`);
+      logger.warn('ContentScript', `Could not find ${mode} button in modal`);
     }
   } catch (error) {
-    console.error('[ContentScript] Error handling reorder modal:', error);
+    logger.error('ContentScript', 'Error handling reorder modal', error);
   }
 }
 
@@ -404,11 +405,11 @@ function notifyReady(): void {
     },
   }).catch((error) => {
     // Service worker might not be ready yet, this is okay
-    console.debug('[ContentScript] Could not notify service worker (may not be ready):', error);
+    logger.info('ContentScript', 'Could not notify service worker (may not be ready)', error);
   });
 }
 
 // Notify service worker when content script loads
 notifyReady();
 
-console.log('[ContentScript] Loaded on', window.location.href);
+logger.info('ContentScript', 'Loaded', { url: window.location.href });

@@ -70,12 +70,57 @@
       color: #ef4444;
     }
 
+    .status-value.checking {
+      color: #6b7280;
+    }
+
+    .status-value.not-on-site {
+      color: #f59e0b;
+    }
+
     .status-value.running {
       color: #3b82f6;
     }
 
     .status-value.idle {
       color: #6b7280;
+    }
+
+    /* Status indicator with dot */
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-indicator .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #9ca3af;
+      flex-shrink: 0;
+    }
+
+    .status-indicator.logged-in .dot {
+      background: #22c55e;
+    }
+
+    .status-indicator.logged-out .dot {
+      background: #ef4444;
+    }
+
+    .status-indicator.checking .dot {
+      background: #9ca3af;
+      animation: pulse 1.5s infinite;
+    }
+
+    .status-indicator.not-on-site .dot {
+      background: #f59e0b;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
     }
 
     .btn {
@@ -151,6 +196,189 @@
       color: #9ca3af;
       text-align: center;
     }
+
+    /* Progress Section (T006) */
+    .progress-section {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #3b82f6;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-text {
+      font-size: 13px;
+      color: #374151;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+
+    .progress-subtext {
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .btn-cancel {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+
+    .btn-cancel:hover {
+      background: #fee2e2;
+    }
+
+    /* Results Section (T008) */
+    .results-section {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .results-header .check-icon {
+      width: 24px;
+      height: 24px;
+      background: #22c55e;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+    }
+
+    .results-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .stat-card {
+      background: #f9fafb;
+      padding: 12px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    .unavailable-warning {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      color: #92400e;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-view-cart {
+      background: #22c55e;
+      color: white;
+      text-decoration: none;
+      display: block;
+      text-align: center;
+    }
+
+    .btn-view-cart:hover {
+      background: #16a34a;
+    }
+
+    /* Error Section (T009) */
+    .error-section {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .error-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .error-text {
+      color: #dc2626;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .error-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .error-actions .btn {
+      flex: 1;
+    }
+
+    .btn-retry {
+      background: #dc2626;
+      color: white;
+    }
+
+    .btn-retry:hover {
+      background: #b91c1c;
+    }
+
+    .btn-dismiss {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    /* Utility classes */
+    .hidden {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
@@ -158,30 +386,61 @@
     <h1>AI Shopping Copilot</h1>
   </div>
 
-  <div id="error-container"></div>
-
-  <div class="status-card">
-    <div class="status-row">
-      <span class="status-label">Login Status</span>
-      <span id="login-status" class="status-value logged-out">Not logged in</span>
-    </div>
-    <div class="status-row">
-      <span class="status-label">Run Status</span>
-      <span id="run-status" class="status-value idle">Idle</span>
-    </div>
-    <div class="status-row">
-      <span class="status-label">Current Phase</span>
-      <span id="current-phase" class="status-value">-</span>
+  <!-- Error Section (T009) -->
+  <div id="error-section" class="error-section hidden">
+    <div class="error-icon">&#9888;</div>
+    <p class="error-text" id="error-message">An error occurred</p>
+    <div class="error-actions">
+      <button id="retry-btn" class="btn btn-retry">Retry</button>
+      <button id="dismiss-btn" class="btn btn-dismiss">Dismiss</button>
     </div>
   </div>
 
-  <button id="start-btn" class="btn btn-primary" disabled>
-    Start Shopping Assistant
-  </button>
+  <!-- Progress Section (T006) -->
+  <div id="progress-section" class="progress-section hidden">
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <p class="progress-text" id="progress-text">Starting...</p>
+    <p class="progress-subtext" id="progress-subtext"></p>
+    <button id="cancel-btn" class="btn btn-cancel">Cancel</button>
+  </div>
 
-  <button id="scan-btn" class="btn btn-secondary">
-    Scan Current Page
-  </button>
+  <!-- Results Section (T008) -->
+  <div id="results-section" class="results-section hidden">
+    <div class="results-header">
+      <div class="check-icon">&#10003;</div>
+      <h3>Merge Complete</h3>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="items-count">0</div>
+        <div class="stat-label">Items Added</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="total-price">€0.00</div>
+        <div class="stat-label">Cart Total</div>
+      </div>
+    </div>
+    <div id="unavailable-warning" class="unavailable-warning hidden">
+      <span>&#9888;</span>
+      <span><span id="unavailable-count">0</span> items unavailable</span>
+    </div>
+    <a href="https://www.auchan.pt/pt/carrinho-compras" target="_blank"
+       class="btn btn-view-cart" id="view-cart-btn">View Cart</a>
+    <button id="new-merge-btn" class="btn btn-secondary">Start New Merge</button>
+  </div>
+
+  <!-- Idle State: Merge Button -->
+  <div id="idle-section">
+    <button id="merge-btn" class="btn btn-primary">
+      Merge last 3 orders
+    </button>
+
+    <button id="scan-btn" class="btn btn-secondary">
+      Scan Current Page
+    </button>
+  </div>
 
   <div class="api-key-section">
     <input type="password" id="api-key-input" class="api-key-input"
@@ -192,9 +451,11 @@
   </div>
 
   <div class="footer">
-    v0.1.0 - AI Shopping Copilot
+    v0.1.0 - AI Shopping Copilot |
+    <a href="debug.html" target="_blank" style="color: #6b7280;">Debug Logs</a>
   </div>
 
+  <!-- popup.js is bundled by esbuild and includes debug-logger -->
   <script src="popup.js"></script>
 </body>
 </html>

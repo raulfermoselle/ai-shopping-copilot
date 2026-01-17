@@ -29,6 +29,7 @@ import {
   ERROR_CODES,
   generateMessageId,
 } from '../types/messages.js';
+import { logger } from '../utils/logger.js';
 
 import type { StateMachine } from '../core/orchestrator/types.js';
 import type { IStoragePort } from '../ports/storage.js';
@@ -96,11 +97,11 @@ const activePorts: Set<chrome.runtime.Port> = new Set();
  */
 async function bootstrap(): Promise<void> {
   if (bootstrapped) {
-    console.log('[SW] Already bootstrapped, skipping');
+    logger.info('SW', 'Already bootstrapped, skipping');
     return;
   }
 
-  console.log('[SW] Bootstrapping service worker...');
+  logger.info('SW', 'Bootstrapping service worker...');
 
   try {
     // 1. Create Chrome adapters
@@ -109,7 +110,7 @@ async function bootstrap(): Promise<void> {
     tabs = new ChromeTabsAdapter();
     alarms = new ChromeAlarmsAdapter();
 
-    console.log('[SW] Adapters created');
+    logger.info('SW', 'Adapters created');
 
     // 2. Create state machine with recovery from chrome.storage.session
     stateMachine = await createStateMachineWithRecovery(
@@ -120,12 +121,12 @@ async function bootstrap(): Promise<void> {
       { debug: true }
     );
 
-    console.log('[SW] State machine created, status:', stateMachine.getState().status);
+    logger.info('SW', 'State machine created', { status: stateMachine.getState().status });
 
     // 3. Check if recovery is needed
     const currentState = stateMachine.getState();
     if (currentState.recoveryNeeded) {
-      console.log('[SW] Recovery needed, resuming interrupted run');
+      logger.info('SW', 'Recovery needed, resuming interrupted run');
       // Clear recovery flag
       stateMachine.dispatch({ type: 'RECOVERY_COMPLETE' });
       // TODO: Resume orchestration from last known phase
@@ -140,13 +141,13 @@ async function bootstrap(): Promise<void> {
     }
 
     bootstrapped = true;
-    console.log('[SW] Bootstrap complete');
+    logger.info('SW', 'Bootstrap complete');
 
     // Run safety assertion
     assertNoCheckoutFunctions();
 
   } catch (error) {
-    console.error('[SW] Bootstrap failed:', error);
+    logger.error('SW', 'Bootstrap failed', error);
     throw error;
   }
 }
@@ -160,7 +161,7 @@ async function bootstrap(): Promise<void> {
  * Used to manage alarms and notify connected UIs.
  */
 function handleStateChange(state: RunState): void {
-  console.log('[SW] State changed:', state.status, state.phase);
+  logger.info('SW', 'State changed', { status: state.status, phase: state.phase });
 
   // Manage keep-alive alarm based on run status
   if (state.status === 'running') {
@@ -211,7 +212,7 @@ function handleMessage(
 ): boolean {
   const startTime = Date.now();
 
-  console.log('[SW] Received message:', message.action, 'from:', sender.tabId ?? 'extension');
+  logger.info('SW', 'Received message', { action: message.action, from: sender.tabId ?? 'extension' });
 
   // Ensure bootstrap is complete
   if (!bootstrapped) {
@@ -341,7 +342,7 @@ async function handleStartRun(
       payload,
     });
 
-    console.log('[SW] Run started, runId:', newState.runId);
+    logger.info('SW', 'Run started', { runId: newState.runId });
 
     // TODO: In future, orchestrator will be instantiated here to drive the run
     // For now, we just transition the state machine
@@ -349,7 +350,7 @@ async function handleStartRun(
     sendResponse(createSuccessResponse(message.id, newState, Date.now() - startTime));
 
   } catch (error) {
-    console.error('[SW] Error starting run:', error);
+    logger.error('SW', 'Error starting run', error);
     sendResponse(createErrorResponse(
       message.id,
       ERROR_CODES.UNKNOWN,
@@ -461,12 +462,12 @@ async function handleSetApiKey(
     // Store in session storage (ephemeral, cleared on browser close)
     await storage.set({ anthropicApiKey: apiKey }, 'session');
 
-    console.log('[SW] API key stored in session storage');
+    logger.info('SW', 'API key stored in session storage');
 
     sendResponse(createSuccessResponse(message.id, { stored: true }, Date.now() - startTime));
 
   } catch (error) {
-    console.error('[SW] Error storing API key:', error);
+    logger.error('SW', 'Error storing API key', error);
     sendResponse(createErrorResponse(
       message.id,
       ERROR_CODES.UNKNOWN,
@@ -494,7 +495,7 @@ async function handleCheckLLMAvailable(
     ));
 
   } catch (error) {
-    console.error('[SW] Error checking LLM availability:', error);
+    logger.error('SW', 'Error checking LLM availability', error);
     sendResponse(createErrorResponse(
       message.id,
       ERROR_CODES.UNKNOWN,
@@ -512,7 +513,7 @@ async function handleCheckLLMAvailable(
  * Used for long-lived connections and state streaming.
  */
 function handlePortConnect(port: chrome.runtime.Port): void {
-  console.log('[SW] Port connected:', port.name);
+  logger.info('SW', 'Port connected', { name: port.name });
 
   activePorts.add(port);
 
@@ -529,13 +530,13 @@ function handlePortConnect(port: chrome.runtime.Port): void {
 
   // Handle port disconnect
   port.onDisconnect.addListener(() => {
-    console.log('[SW] Port disconnected:', port.name);
+    logger.info('SW', 'Port disconnected', { name: port.name });
     activePorts.delete(port);
   });
 
   // Handle messages on the port
   port.onMessage.addListener((message: ExtensionMessage) => {
-    console.log('[SW] Port message:', message.action);
+    logger.info('SW', 'Port message', { action: message.action });
 
     // For port messages, we send response back through the port
     const sendResponse = (response: ExtensionResponse) => {
@@ -560,14 +561,14 @@ function handlePortConnect(port: chrome.runtime.Port): void {
  */
 function setupAlarmHandlers(): void {
   alarms.addListener(handleAlarm);
-  console.log('[SW] Alarm handlers registered');
+  logger.info('SW', 'Alarm handlers registered');
 }
 
 /**
  * Handle alarm events
  */
 function handleAlarm(alarm: AlarmInfo): void {
-  console.log('[SW] Alarm fired:', alarm.name);
+  logger.info('SW', 'Alarm fired', { name: alarm.name });
 
   switch (alarm.name) {
     case ALARM_NAMES.KEEP_ALIVE:
@@ -587,7 +588,7 @@ function handleAlarm(alarm: AlarmInfo): void {
       break;
 
     default:
-      console.log('[SW] Unknown alarm:', alarm.name);
+      logger.info('SW', 'Unknown alarm', { name: alarm.name });
   }
 }
 
@@ -595,7 +596,7 @@ function handleAlarm(alarm: AlarmInfo): void {
  * Keep-alive alarm handler - prevents service worker termination during runs
  */
 function handleKeepAliveAlarm(): void {
-  console.log('[SW] Keep-alive ping at', new Date().toISOString());
+  logger.info('SW', 'Keep-alive ping', { time: new Date().toISOString() });
 
   // Check if we still need to be alive
   if (bootstrapped && stateMachine) {
@@ -611,7 +612,7 @@ function handleKeepAliveAlarm(): void {
  * Persist state alarm handler - ensures state is saved periodically
  */
 function handlePersistStateAlarm(): void {
-  console.log('[SW] Periodic state persistence');
+  logger.info('SW', 'Periodic state persistence');
   // State machine already persists on every change
   // This is a backup in case of issues
   if (bootstrapped && stateMachine) {
@@ -624,7 +625,7 @@ function handlePersistStateAlarm(): void {
  * Cache cleanup alarm handler - clears expired caches
  */
 function handleCacheCleanupAlarm(): void {
-  console.log('[SW] Cache cleanup');
+  logger.info('SW', 'Cache cleanup');
   // TODO: Implement cache cleanup when order cache is implemented
 }
 
@@ -632,12 +633,12 @@ function handleCacheCleanupAlarm(): void {
  * Retry alarm handler - retries failed operations
  */
 function handleRetryAlarm(): void {
-  console.log('[SW] Retry alarm');
+  logger.info('SW', 'Retry alarm');
   // TODO: Implement retry logic when orchestrator is implemented
   if (bootstrapped && stateMachine) {
     const state = stateMachine.getState();
     if (state.status === 'paused' && state.error?.recoverable) {
-      console.log('[SW] Attempting to resume from recoverable error');
+      logger.info('SW', 'Attempting to resume from recoverable error');
       stateMachine.dispatch({ type: 'RESUME_RUN' });
     }
   }
@@ -653,7 +654,7 @@ async function startKeepAlive(): Promise<void> {
       delayInMinutes: 1,
       periodInMinutes: 1,
     });
-    console.log('[SW] Keep-alive alarm started');
+    logger.info('SW', 'Keep-alive alarm started');
   }
 }
 
@@ -663,7 +664,7 @@ async function startKeepAlive(): Promise<void> {
 async function stopKeepAlive(): Promise<void> {
   const cleared = await alarms.clear(ALARM_NAMES.KEEP_ALIVE);
   if (cleared) {
-    console.log('[SW] Keep-alive alarm stopped');
+    logger.info('SW', 'Keep-alive alarm stopped');
   }
 }
 
@@ -675,7 +676,7 @@ async function stopKeepAlive(): Promise<void> {
  * Handle install event (extension first installed or updated)
  */
 chrome.runtime.onInstalled.addListener((details) => {
-  console.log('[SW] Extension installed:', details.reason);
+  logger.info('SW', 'Extension installed', { reason: details.reason });
 
   // Set up daily cache cleanup alarm
   alarms.create(ALARM_NAMES.CACHE_CLEANUP, {
@@ -688,7 +689,7 @@ chrome.runtime.onInstalled.addListener((details) => {
  * Handle startup event (browser started with extension already installed)
  */
 chrome.runtime.onStartup.addListener(() => {
-  console.log('[SW] Browser startup');
+  logger.info('SW', 'Browser startup');
   bootstrap().catch(console.error);
 });
 
@@ -734,7 +735,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Note: result is intentionally unused; we return true below for async
       })
       .catch((error) => {
-        console.error('[SW] Bootstrap failed during message handling:', error);
+        logger.error('SW', 'Bootstrap failed during message handling', error);
         sendResponse(createErrorResponse(
           (message as ExtensionMessage).id,
           ERROR_CODES.UNKNOWN,
@@ -761,7 +762,7 @@ chrome.runtime.onConnect.addListener(handlePortConnect);
 
 // Bootstrap immediately on script load
 bootstrap().catch((error) => {
-  console.error('[SW] Initial bootstrap failed:', error);
+  logger.error('SW', 'Initial bootstrap failed', error);
 });
 
 // =============================================================================
