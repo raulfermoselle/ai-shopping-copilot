@@ -1,0 +1,4 @@
+# Ignore all capture artifacts (screenshots, snapshots, logs)
+# These are ephemeral debugging data, not source code
+*
+!.gitignore

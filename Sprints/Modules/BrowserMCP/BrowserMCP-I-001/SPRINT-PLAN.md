@@ -42,7 +42,7 @@
 | T002 | Configure MCP server | Setup | COMPLETED | 1 | mcpServers.browsermcp configured in Claude Code |
 | T003 | Verify BrowserMCP connection | Setup | COMPLETED | 1 | Screenshot received via BrowserMCP tools |
 | T004 | Discover BrowserMCP capabilities | Harness | COMPLETED | 1 | 12 tools documented, no browser_evaluate |
-| T005 | Implement capture_state pattern | Harness | PENDING | 2 | Screenshot + snapshot + URL + console logs captured |
+| T005 | Implement capture_state pattern | Harness | COMPLETED | 2 | Procedure documented in automation/harness/CAPTURE-STATE.md |
 | T006 | Create artifact persistence | Harness | PENDING | 2 | Artifacts readable in `runs/{timestamp}/{step}/` |
 | T007 | Implement auth verification | Workflow | PENDING | 1 | Detect logged-in vs logged-out state |
 | T008 | Navigate to order history | Workflow | PENDING | 1 | Discover URL pattern for orders page |
@@ -54,7 +54,7 @@
 | T014 | Generate Review Pack | Guardrails | PENDING | 2 | Cart diff + screenshots + action timeline |
 | T015 | Full workflow validation | Guardrails | PENDING | 2 | End-to-end: auth→orders→merge→report→stop |
 
-**Totals**: 15 tasks, 21 points. Completed: 4 tasks, 4 points. Remaining: 11 tasks, 17 points.
+**Totals**: 15 tasks, 21 points. Completed: 5 tasks, 6 points. Remaining: 10 tasks, 15 points.
 
 ---
 

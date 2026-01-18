@@ -59,7 +59,7 @@
 ### Discovery & Validation
 
 - [x] T004 [US2] ~~Discover BrowserMCP tool names and capabilities~~ (Confirmed: 12 tools available, no browser_evaluate)
-- [ ] T005 [US2] Implement capture_state pattern (screenshot + snapshot + URL + console)
+- [x] T005 [US2] Implement capture_state pattern (screenshot + snapshot + URL + console)
 - [ ] T006 [US2] Create artifact persistence structure (`runs/{timestamp}/{step}/`)
 
 **Phase 1 Complete Criteria**:
