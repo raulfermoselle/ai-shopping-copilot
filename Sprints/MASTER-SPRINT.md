@@ -74,9 +74,6 @@
 ## Sprint Queue (Prioritized)
 
 ### Priority 1 (Active/Ready to Start)
-- **Sprint-EXT-I-003**: Extension BrowserMCP Bridge (NEXT - replacing abandoned EXT-I-002)
-  - Architectural pivot: MCP server for automation, extension as UI client
-  - Will reuse popup UI, manifest, esbuild config from EXT-I-002
 - **Sprint-SU-A-001**: Substitution Architecture (research complete, ready to start)
 - **Sprint-CP-I-001**: Control Panel Implementation (unblocked by CO-I-001)
 
@@ -84,7 +81,6 @@
 - **Sprint-SS-R-001**: SlotScout Research (60% complete, awaiting user manual research)
 
 ### Backlog
-- Sprint-EXT-I-004: Extension additional features (after EXT-I-003)
 - Sprint-SU-A-001: Substitution Architecture (research complete, ready to start)
 - Sprint-SU-I-001: Substitution Implementation (needs SU-A-001)
 - Sprint-SS-A-001: SlotScout Architecture (needs SS-R-001)
@@ -174,10 +170,7 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
   - Extension becomes thin UI client, MCP server handles automation
   - Reuses popup UI, manifest, esbuild config from abandoned sprint
 - **Currently Ready (Priority 1)**:
-  - **Sprint-EXT-I-003** - Extension BrowserMCP Bridge (NEXT)
-    - Implement MCP server for browser automation
-    - WebSocket communication between extension and MCP
-    - Maintain extension UI components
+  - Extension next steps: TBD (browserMCP bridge approach under specification)
   - **Sprint-SU-A-001** - Substitution Architecture (ready to start)
   - **Sprint-CP-I-001** - Control Panel Implementation (ready to start)
 - **Blocked**: SS-R-001 needs user to manually research delivery slot page

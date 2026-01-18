@@ -257,12 +257,9 @@ After this discovery, the team decided to pivot to a browserMCP bridge architect
 
 ## Next Steps
 
-1. **Sprint-EXT-I-003: BrowserMCP Bridge Implementation** (Next Sprint)
-   - Implement MCP server for browser automation
-   - Set up WebSocket communication between extension and MCP bridge
-   - Migrate merge logic from content script to MCP bridge
-   - Keep extension UI components, connect to MCP endpoints
-   - Full E2E testing with MCP bridge architecture
+1. **Extension Next Phase**: TBD (browserMCP bridge approach under specification)
+   - Requires specification discussion before sprint creation
+   - Potential approach: MCP bridge for browser automation, extension as thin UI client
 
 2. **Artifact Retention**:
    - Keep manifest.json, esbuild config, popup UI components (reusable)
