@@ -37,6 +37,7 @@ import type {
   LoginCheckResponse,
 } from '../../types/messages.js';
 import { createRequest, ERROR_CODES } from '../../types/messages.js';
+import { logger } from '../../utils/logger.js';
 
 // =============================================================================
 // Types
@@ -525,7 +526,7 @@ export class RunOrchestrator {
         });
 
         this.log(`Merging order ${i + 1}/${sortedOrders.length} (${order.orderId}) with mode: ${mode}`);
-        await this.reorderOrder(order.orderId, mode);
+        await this.reorderOrder(order, mode);
       }
     }
 
@@ -589,32 +590,100 @@ export class RunOrchestrator {
   /**
    * Reorder a specific order
    *
-   * @param orderId - The order ID to reorder
+   * IMPORTANT: Must navigate to order DETAIL page before reorder.
+   * The reorder button only exists on detail pages, not the order list.
+   *
+   * @param order - The order to reorder (must have detailUrl)
    * @param mode - 'replace' clears cart first, 'merge' adds to existing cart
    */
-  private async reorderOrder(orderId: string, mode: 'replace' | 'merge' = 'replace'): Promise<void> {
+  private async reorderOrder(order: OrderSummary, mode: 'replace' | 'merge' = 'replace'): Promise<void> {
+    const { tabs } = this.deps;
+
     if (!this.context) {
       throw new Error('Run context not initialized');
     }
 
+    // CRITICAL: Navigate to order DETAIL page first
+    // The reorder button ("Encomendar de novo") only exists on order detail pages,
+    // NOT on the order history list page
+    const detailUrl = order.detailUrl;
+    if (!detailUrl) {
+      this.log(`Order ${order.orderId} has no detailUrl - cannot navigate to detail page`);
+      return;
+    }
+    this.log(`Navigating to order detail page`, { orderId: order.orderId, detailUrl });
+
+    await tabs.update(this.context.tabId, { url: detailUrl });
+    await tabs.waitForLoad(this.context.tabId, this.config.operationTimeoutMs);
+
+    // Give the page time to fully render (including any popups)
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
     // Send reorder request to content script
-    const response = await this.sendToTab(
+    let response = await this.sendToTab<ExtensionResponse<{ clicked?: boolean; expanded?: boolean }>>(
       this.context.tabId,
       'order.reorder',
-      { orderId, mode }
+      { orderId: order.orderId, mode }
     );
+
+    // If order was expanded (clicked to view details), wait and retry
+    if (response.success && response.data?.expanded && !response.data?.clicked) {
+      this.log(`Order ${order.orderId} expanded, waiting for detail page...`);
+
+      // Wait for the page to load (either detail page or same page with expanded content)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Re-inject content script in case we navigated
+      try {
+        await this.injectContentScript();
+      } catch {
+        // Ignore injection errors
+      }
+
+      // Retry the reorder
+      response = await this.sendToTab<ExtensionResponse<{ clicked?: boolean; expanded?: boolean }>>(
+        this.context.tabId,
+        'order.reorder',
+        { orderId: order.orderId, mode }
+      );
+    }
 
     if (!response.success) {
       // Reorder might fail if items are unavailable - this is not fatal
       this.log(`Reorder warning: ${response.error?.message}`);
+      return; // Don't wait for cart if reorder failed
     }
 
-    // Wait for cart page to load after reorder
-    await this.deps.tabs.waitForUrl(
-      this.context.tabId,
-      /cart/,
-      this.config.operationTimeoutMs
-    );
+    if (!response.data?.clicked) {
+      this.log(`Reorder did not click button for ${order.orderId}`);
+      return;
+    }
+
+    // Wait for cart page to load after reorder (modal click triggers redirect)
+    // Use a longer timeout since modal animation and redirect take time
+    try {
+      await tabs.waitForUrl(
+        this.context.tabId,
+        /cart/,
+        this.config.operationTimeoutMs
+      );
+    } catch {
+      // Cart redirect might not happen immediately (especially for merge mode)
+      // We'll verify cart state in the scan step
+      this.log(`Did not redirect to cart after reorder (may be normal for merge mode)`);
+    }
+  }
+
+  /**
+   * Inject content script into current tab
+   */
+  private async injectContentScript(): Promise<void> {
+    if (!this.context) return;
+
+    await chrome.scripting.executeScript({
+      target: { tabId: this.context.tabId },
+      files: ['dist/content-script.js'],
+    });
   }
 
   /**
@@ -1163,9 +1232,13 @@ In 1-2 sentences, explain why this is a good substitute or any concerns the shop
   /**
    * Log a message (if debug enabled)
    */
-  private log(message: string): void {
+  private log(message: string, data?: unknown): void {
     if (this.config.debug) {
-      console.log(`[Orchestrator] ${message}`);
+      if (data !== undefined) {
+        logger.info('Orchestrator', message, data);
+      } else {
+        logger.info('Orchestrator', message);
+      }
     }
   }
 }

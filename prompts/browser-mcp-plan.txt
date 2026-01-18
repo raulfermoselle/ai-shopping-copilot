@@ -1,0 +1,100 @@
+PLAN — Switch Auchan automation to “Live Browser MCP” development (BrowserMCP-first), with guardrails + fallbacks
+
+GOAL
+- Stop fighting Chrome extension DOM automation directly.
+- Give Claude Code an always-available, real-time browser control surface (click/type/screenshot/DOM snapshot/console logs) so it can autonomously explore auchan.pt and iteratively implement the cart-prep workflow.
+- Maintain user trust: NEVER confirm/submit the final order automatically. Hard stop at “Review & Confirm”.
+
+WHY THIS APPROACH
+- BrowserMCP is MCP server + Chrome extension that automates the user’s actual Chromium browser tab via CDP.
+- This reuses an already-logged-in profile (reduces login/2FA/bot-detection friction) and keeps the browser visible and interruptible for the user.
+- The agent can take screenshots + structured snapshots during execution, which Claude Code can use to debug without me constantly re-running manual tests.
+
+PHASE 0 — Setup (1 time)
+1) Install Browser MCP Chrome extension.
+2) Add MCP server config for BrowserMCP in the MCP client used by Claude Code.
+   - Use stability mode by default (avoid @latest unless needed):
+     {
+       "mcpServers": {
+         "browsermcp": { "command": "npx", "args": ["@browsermcp/mcp"] }
+       }
+     }
+   - If “Client closed” occurs, confirm @latest is NOT being used (per BrowserMCP troubleshooting).
+3) Create a dedicated Chrome profile for automation:
+   - Only login to auchan.pt (+ minimal required accounts/extensions).
+   - Disable password-manager overlays if they interfere.
+4) Open auchan.pt in that profile and click the extension “Connect” on the active tab (single-tab control model).
+
+PHASE 1 — Build the “Auchan Live Exploration Harness”
+Deliver a small Node/TS harness that Claude Code can run repeatedly:
+- Provides a single command: “run_step(stepName)” and a “capture_state()”.
+- capture_state() must always collect:
+  - screenshot
+  - structured page snapshot (accessibility/DOM summary whichever BrowserMCP provides)
+  - current URL
+  - console logs
+- Persist every run as an artifact folder:
+  runs/{timestamp}/{stepName}/(screenshot.png, snapshot.json/md, console.json, notes.md)
+This turns failures into reproducible evidence Claude can analyze without me babysitting.
+
+PHASE 2 — Re-implement the minimal “Load last 3 orders → Merge into cart” flow using BrowserMCP tools
+Implementation strategy (important):
+- Prefer URL-driven navigation where possible (orders page, order details, cart, search URLs).
+- Use snapshot-driven selectors: find stable anchors (button text, aria labels, role-based matches) and avoid brittle CSS.
+- After each click/navigation: wait-for-stability loop:
+  - detect URL change OR key element appears OR network/DOM settles (whichever tooling exists).
+- At the end of each step, call capture_state().
+
+Definition of Done (Phase 2):
+- Starting from logged-in auchan.pt, agent navigates to order history,
+  selects last 3 orders, triggers “add to cart/merge” behavior, lands on cart page,
+  and capture_state() proves cart contains expected deltas.
+
+PHASE 3 — Add the real grocery-agent intelligence (still in “prepare only” mode)
+3.1 Shopping list ingestion
+- Load list from your canonical source (Google Keep OR a local file mirror).
+- Normalize items to Auchan search queries and preferred brands/variants.
+
+3.2 StockPruner
+- Implement pruning heuristics based on:
+  - purchase recency (from order history scrape)
+  - item category “slow consumption” rules
+  - configurable household consumption windows
+- Output: an explicit “proposed removals” list with rationale, never auto-removing without user review in early versions.
+
+3.3 Substitutions
+- When an item is unavailable:
+  - open product page or cart row state
+  - search alternatives via URL query
+  - choose replacements using constraints (brand preference, size, price ceiling)
+- Output: explicit “proposed substitutions” list with rationale.
+
+PHASE 4 — Trust + Safety Guardrails (non-negotiable)
+- Hard rule: NEVER click the final “Confirm order / Place order / Pay” button.
+- Implement a “red button detector”:
+  - block clicks on any element whose text/aria-label matches confirm/pay/checkout-finalization patterns.
+- Always end at a “Review Pack”:
+  - cart diff (added/removed/substituted)
+  - total estimated cost
+  - screenshots of final cart + checkout step before final confirmation
+  - a human-readable timeline of actions (“where the agent clicked”)
+
+PHASE 5 — Fallback plan if BrowserMCP hits limitations
+If BrowserMCP becomes unreliable or lacks a needed capability:
+- Keep the same high-level Auchan workflow, but swap the control layer:
+  A) Playwright MCP (owned browser) for deterministic runs, plus
+  B) Chrome DevTools MCP for live-debug sessions (DOM/CSS/network introspection)
+- Maintain the same “runs/{timestamp}” artifact format so debugging stays consistent.
+
+DELIVERABLES CHECKLIST (what Claude Code should produce)
+- /automation/harness (run_step + capture_state + run artifact persistence)
+- /automation/auchan (site adapter: urls, stable selectors, step functions)
+- /automation/policies (guardrails: “never confirm order”, blocked actions)
+- /automation/review-pack (cart diff + rationale report generator)
+- A single CLI entrypoint:
+  npm run auchan:prepare-cart
+  -> runs Phase 2+3 logic, then stops at Review Pack
+
+OPERATING MODE
+- During dev: run in the dedicated Chrome profile with the tab connected; Claude Code iterates by reading run artifacts.
+- In “away mode”: keep a remote desktop session to that Chrome profile (or a small always-on machine) so Claude can run the workflow without me present, still stopping before final confirmation.

@@ -27,6 +27,9 @@ if (existsSync(packageDir)) {
 }
 mkdirSync(distDir, { recursive: true });
 
+// Path alias resolution for @aisc/shared
+const sharedPackagePath = join(__dirname, '..', 'packages', 'shared', 'src');
+
 // Common esbuild options
 const commonOptions = {
   bundle: true,
@@ -34,6 +37,10 @@ const commonOptions = {
   target: ['chrome120'],
   format: 'esm',
   logLevel: 'info',
+  // Resolve @aisc/shared to the local packages/shared/src directory
+  alias: {
+    '@aisc/shared': sharedPackagePath,
+  },
 };
 
 // Build configurations

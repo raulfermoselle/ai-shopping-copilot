@@ -21,7 +21,7 @@ const DEBUG_SERVER_URL = 'http://localhost:9222/log';
 const DEBUG_LOG_KEY = 'aisc_debug_logs';
 const MAX_STORED_LOGS = 100;
 
-type LogLevel = 'info' | 'warn' | 'error';
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
   timestamp: string;
@@ -108,6 +108,10 @@ function log(level: LogLevel, source: string, message: string, data?: unknown): 
     case 'warn':
       console.warn(...consoleArgs);
       break;
+    case 'debug':
+      // Use console.debug for debug level
+      console.debug(...consoleArgs);
+      break;
     default:
       console.log(...consoleArgs);
   }
@@ -117,6 +121,16 @@ function log(level: LogLevel, source: string, message: string, data?: unknown): 
  * Logger interface - use this throughout the extension.
  */
 export const logger = {
+  /**
+   * Log debug message (verbose, for tracing)
+   * @param source - Component name (e.g., 'ServiceWorker', 'Popup', 'ContentScript')
+   * @param message - Log message
+   * @param data - Optional data to include
+   */
+  debug(source: string, message: string, data?: unknown): void {
+    log('debug', source, message, data);
+  },
+
   /**
    * Log info message
    * @param source - Component name (e.g., 'ServiceWorker', 'Popup', 'ContentScript')

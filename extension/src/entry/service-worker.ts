@@ -21,7 +21,9 @@ import { ChromeStorageAdapter } from '../adapters/chrome/storage-adapter.js';
 import { ChromeMessagingAdapter } from '../adapters/chrome/messaging-adapter.js';
 import { ChromeTabsAdapter } from '../adapters/chrome/tabs-adapter.js';
 import { ChromeAlarmsAdapter } from '../adapters/chrome/alarms-adapter.js';
+import { ChromeLLMAdapter } from '../adapters/chrome/llm-adapter.js';
 import { createStateMachineWithRecovery } from '../core/orchestrator/state-machine.js';
+import { RunOrchestrator } from '../core/orchestrator/orchestrator.js';
 import { ALARM_NAMES } from '../ports/alarms.js';
 import {
   createSuccessResponse,
@@ -36,6 +38,7 @@ import type { IStoragePort } from '../ports/storage.js';
 import type { IMessagingPort, MessageSender } from '../ports/messaging.js';
 import type { ITabsPort } from '../ports/tabs.js';
 import type { IAlarmsPort, AlarmInfo } from '../ports/alarms.js';
+import type { ILLMPort } from '../ports/llm.js';
 import type {
   ExtensionMessage,
   ExtensionResponse,
@@ -78,6 +81,12 @@ let alarms: IAlarmsPort;
 
 /** State machine - initialized in bootstrap() */
 let stateMachine: StateMachine;
+
+/** LLM adapter - initialized in bootstrap() */
+let llm: ILLMPort;
+
+/** Run orchestrator - initialized in bootstrap() */
+let orchestrator: RunOrchestrator;
 
 /** Track if bootstrap has completed */
 let bootstrapped = false;
@@ -123,19 +132,29 @@ async function bootstrap(): Promise<void> {
 
     logger.info('SW', 'State machine created', { status: stateMachine.getState().status });
 
-    // 3. Check if recovery is needed
+    // 3. Create LLM adapter
+    llm = new ChromeLLMAdapter(storage);
+    logger.info('SW', 'LLM adapter created');
+
+    // 4. Create orchestrator
+    orchestrator = new RunOrchestrator(
+      { storage, messaging, tabs, llm, stateMachine },
+      { debug: true }
+    );
+    logger.info('SW', 'Orchestrator created');
+
+    // 5. Check for stale state and reset to idle
     const currentState = stateMachine.getState();
-    if (currentState.recoveryNeeded) {
-      logger.info('SW', 'Recovery needed, resuming interrupted run');
-      // Clear recovery flag
-      stateMachine.dispatch({ type: 'RECOVERY_COMPLETE' });
-      // TODO: Resume orchestration from last known phase
+    if (currentState.status === 'running' || currentState.status === 'paused' || currentState.recoveryNeeded) {
+      // Can't recover without context from previous session - reset to idle
+      logger.info('SW', 'Clearing stale state on boot', { status: currentState.status });
+      stateMachine.dispatch({ type: 'CANCEL_RUN' });
     }
 
-    // 4. Set up alarm handlers
+    // 6. Set up alarm handlers
     setupAlarmHandlers();
 
-    // 5. Set up keep-alive alarm during active runs
+    // 7. Set up keep-alive alarm during active runs
     if (currentState.status === 'running') {
       await startKeepAlive();
     }
@@ -330,24 +349,33 @@ async function handleStartRun(
       return;
     }
 
-    // Build payload with optional orderId (only include if defined)
-    const payload: { tabId: number; orderId?: string } = { tabId };
-    if (message.payload?.orderId !== undefined) {
-      payload.orderId = message.payload.orderId;
+    logger.info('SW', 'Starting run via orchestrator', { tabId, orderId: message.payload?.orderId });
+
+    // Ensure content script is injected (may not be if page was loaded before extension)
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['dist/content-script.js'],
+      });
+      logger.info('SW', 'Content script injected');
+    } catch (injectError) {
+      // Script may already be injected, which throws - that's OK
+      logger.info('SW', 'Content script injection skipped (may already exist)', {
+        error: injectError instanceof Error ? injectError.message : String(injectError),
+      });
     }
 
-    // Dispatch START_RUN action
-    const newState = stateMachine.dispatch({
-      type: 'START_RUN',
-      payload,
+    // Respond immediately to unblock the popup
+    sendResponse(createSuccessResponse(
+      message.id,
+      { status: 'starting' },
+      Date.now() - startTime
+    ));
+
+    // Start orchestrator asynchronously (handles state machine internally)
+    orchestrator.startRun(tabId, message.payload?.orderId).catch(error => {
+      logger.error('SW', 'Run execution failed', error);
     });
-
-    logger.info('SW', 'Run started', { runId: newState.runId });
-
-    // TODO: In future, orchestrator will be instantiated here to drive the run
-    // For now, we just transition the state machine
-
-    sendResponse(createSuccessResponse(message.id, newState, Date.now() - startTime));
 
   } catch (error) {
     logger.error('SW', 'Error starting run', error);
@@ -779,6 +807,8 @@ export const __testing__ = {
   getMessaging: () => messaging,
   getTabs: () => tabs,
   getAlarms: () => alarms,
+  getLLM: () => llm,
+  getOrchestrator: () => orchestrator,
   isBootstrapped: () => bootstrapped,
   reset: async () => {
     bootstrapped = false;

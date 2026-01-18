@@ -59,6 +59,52 @@ export function extractOrderHistory(options?: { limit?: number }): OrderSummary[
         continue;
       }
 
+      // Extract detail URL from order link
+      // The link is the PARENT of the card, not a child element
+      // HTML structure: .auc-orders__order-summary > a[href] > .auc-orders__order-card
+      let detailUrl = '';
+
+      // Strategy 1: Navigate up to find parent link (most common case)
+      const parentLink = card.closest('a[href*="detalhes-encomenda"]') as HTMLAnchorElement | null;
+      if (parentLink) {
+        detailUrl = parentLink.href;
+      }
+
+      // Strategy 2: Check if parent element is a link
+      if (!detailUrl && card.parentElement?.tagName === 'A') {
+        const parentAnchor = card.parentElement as HTMLAnchorElement;
+        if (parentAnchor.href?.includes('detalhes-encomenda') || parentAnchor.href?.includes('orderID')) {
+          detailUrl = parentAnchor.href;
+        }
+      }
+
+      // Strategy 3: Look for sibling or nearby link (in case structure changed)
+      if (!detailUrl) {
+        const wrapper = card.closest('.auc-orders__order-summary');
+        if (wrapper) {
+          const link = wrapper.querySelector('a[href*="detalhes-encomenda"]') as HTMLAnchorElement | null;
+          if (link) {
+            detailUrl = link.href;
+          }
+        }
+      }
+
+      // Strategy 4: Try any link with orderID parameter
+      if (!detailUrl) {
+        const wrapper = card.closest('.auc-orders__order-summary, .card');
+        if (wrapper) {
+          const anyLink = wrapper.querySelector('a[href*="orderID"]') as HTMLAnchorElement | null;
+          if (anyLink) {
+            detailUrl = anyLink.href;
+          }
+        }
+      }
+
+      // Make URL absolute if needed
+      if (detailUrl && !detailUrl.startsWith('http')) {
+        detailUrl = `https://www.auchan.pt${detailUrl}`;
+      }
+
       // Extract date and timestamp
       // Prefer data-date attribute on date container (ISO timestamp)
       const dateContainer = card.querySelector('.auc-orders__order-date [data-date]')
@@ -115,15 +161,24 @@ export function extractOrderHistory(options?: { limit?: number }): OrderSummary[
       const deliveryDate = extractDeliveryDate(card);
 
       // Build OrderSummary object
-      orders.push({
+      const orderSummary: OrderSummary = {
         orderId,
         date,
         timestamp,
         total,
         itemCount,
         status,
-        deliveryDate,
-      });
+      };
+
+      // Add optional fields only if they have values
+      if (detailUrl) {
+        orderSummary.detailUrl = detailUrl;
+      }
+      if (deliveryDate) {
+        orderSummary.deliveryDate = deliveryDate;
+      }
+
+      orders.push(orderSummary);
     } catch (error) {
       // Skip malformed cards but log to console for debugging
       console.warn(`[OrderHistory] Failed to parse order card:`, error);

@@ -16,6 +16,20 @@ import { extractOrderHistory, isOnOrderHistoryPage, getOrderCount } from '../con
 import { extractCartItems, isOnCartPage, hasCartItems } from '../content-scripts/extractors/cart-scanner.js';
 import { extractDeliverySlots, extractAllDaysSlots, isOnSlotsPage } from '../content-scripts/extractors/slot-extractor.js';
 import { logger } from '../utils/logger.js';
+import { ExtensionPageInteractor } from '../interactor/extension-page-interactor.js';
+import {
+  POPUP_PATTERNS,
+  isDangerousText,
+} from '@aisc/shared';
+
+// CSS-compatible modal selectors (no Playwright :has-text() syntax)
+const MODAL_SELECTORS = {
+  containers: ['.modal', '[role="dialog"]', '.auc-modal', '[aria-modal="true"]'],
+  mergeButtonTexts: ['juntar', 'adicionar'],  // Portuguese: "Add to cart"
+  confirmButtonTexts: ['encomendar de novo', 'confirmar', 'eliminar'],  // Portuguese: "Reorder"/"Confirm"/"Remove"
+  cancelButtonTexts: ['cancelar', 'fechar'],  // Portuguese: "Cancel"/"Close"
+  cartRemovalText: 'remover produtos do carrinho',  // Portuguese: "Remove products from cart"
+};
 
 import type {
   ExtensionMessage,
@@ -183,137 +197,473 @@ function handleOrderExtractHistory(message: OrderExtractHistoryRequest): Extensi
   }
 }
 
+// ============================================================================
+// MODAL DETECTION HELPERS
+// ============================================================================
+
+/**
+ * Simulate a real mouse click with proper events
+ * Some frameworks (React, Vue) need proper mouse events, not just .click()
+ */
+function simulateRealClick(element: HTMLElement): void {
+  // Scroll element into view first
+  element.scrollIntoView({ behavior: 'instant', block: 'center' });
+
+  // Get element position for mouse event coordinates
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+
+  // Dispatch mousedown, mouseup, then click (full click sequence)
+  const mouseDownEvent = new MouseEvent('mousedown', {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX: x,
+    clientY: y,
+  });
+
+  const mouseUpEvent = new MouseEvent('mouseup', {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX: x,
+    clientY: y,
+  });
+
+  const clickEvent = new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX: x,
+    clientY: y,
+  });
+
+  element.dispatchEvent(mouseDownEvent);
+  element.dispatchEvent(mouseUpEvent);
+  element.dispatchEvent(clickEvent);
+
+  // Also call native click as fallback
+  element.click();
+
+  logger.info('ContentScript', 'Simulated real click on element', {
+    tag: element.tagName,
+    className: element.className?.substring(0, 50),
+    position: { x, y },
+  });
+}
+
+/**
+ * Check if an element is visible (not hidden by CSS)
+ */
+function isElementVisible(element: Element): boolean {
+  const style = window.getComputedStyle(element);
+  if (style.display === 'none' || style.visibility === 'hidden') return false;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+/**
+ * Find a visible modal in the DOM
+ */
+function findVisibleModal(): Element | null {
+  for (const selector of MODAL_SELECTORS.containers) {
+    const modals = document.querySelectorAll(selector);
+    for (const modal of modals) {
+      if (isElementVisible(modal)) {
+        return modal;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Log all potential modal elements in the DOM for debugging
+ */
+function logPotentialModals(): void {
+  // Extended list of modal selectors to check
+  const allModalSelectors = [
+    '.modal', '[role="dialog"]', '.auc-modal', '[aria-modal="true"]',
+    '.modal-dialog', '.modal-content', '.dialog', '.popup', '.overlay',
+    '[class*="modal"]', '[class*="dialog"]', '[class*="popup"]',
+    '.ReactModal__Content', '.MuiDialog-root', '.ant-modal',
+  ];
+
+  const found: Array<{selector: string, count: number, sample: string}> = [];
+
+  for (const selector of allModalSelectors) {
+    try {
+      const elements = document.querySelectorAll(selector);
+      if (elements.length > 0) {
+        const sample = elements[0];
+        const isVisible = isElementVisible(sample);
+        found.push({
+          selector,
+          count: elements.length,
+          sample: `${sample.tagName}.${sample.className?.toString().substring(0, 50)} visible=${isVisible}`,
+        });
+      }
+    } catch (e) {
+      // Invalid selector, skip
+    }
+  }
+
+  logger.info('ContentScript', 'Potential modal elements in DOM', { found });
+}
+
+/**
+ * Wait for modal to appear using MutationObserver
+ * Returns the modal element when found, or null on timeout
+ */
+function waitForModal(timeout: number = 5000): Promise<Element | null> {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+
+    // Log what modals exist before waiting
+    logger.info('ContentScript', 'Modal state before waiting');
+    logPotentialModals();
+
+    // Check if modal already visible
+    const existingModal = findVisibleModal();
+    if (existingModal) {
+      logger.info('ContentScript', 'Modal already visible', {
+        tag: existingModal.tagName,
+        className: existingModal.className,
+      });
+      resolve(existingModal);
+      return;
+    }
+
+    const observer = new MutationObserver((mutations) => {
+      const modal = findVisibleModal();
+      if (modal) {
+        observer.disconnect();
+        logger.info('ContentScript', 'Modal appeared via MutationObserver', {
+          tag: modal.tagName,
+          className: modal.className,
+        });
+        resolve(modal);
+      } else if (Date.now() - startTime > timeout) {
+        observer.disconnect();
+        logger.warn('ContentScript', 'Modal wait timed out');
+        resolve(null);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'aria-hidden', 'hidden', 'open'],
+    });
+
+    // Timeout fallback with diagnostic logging
+    setTimeout(() => {
+      observer.disconnect();
+      const modal = findVisibleModal();
+      if (modal) {
+        resolve(modal);
+      } else {
+        logger.warn('ContentScript', 'Modal wait timeout reached');
+        // Log what exists after timeout for debugging
+        logger.info('ContentScript', 'Modal state after timeout');
+        logPotentialModals();
+        resolve(null);
+      }
+    }, timeout);
+  });
+}
+
+/**
+ * Find a visible button within a container by its text content
+ * @param container - The element to search within
+ * @param textOptions - Array of text strings to match (case-insensitive)
+ */
+function findButtonByText(container: Element, textOptions: string[]): HTMLButtonElement | null {
+  const buttons = container.querySelectorAll('button, a.btn, a.button, [role="button"]');
+  for (const button of buttons) {
+    const text = (button.textContent?.trim().toLowerCase() || '');
+    if (!isElementVisible(button)) continue;
+
+    for (const option of textOptions) {
+      if (text.includes(option.toLowerCase())) {
+        logger.info('ContentScript', 'Found button by text', {
+          searchedFor: option,
+          foundText: button.textContent?.trim()
+        });
+        return button as HTMLButtonElement;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Handle order.reorder - Click reorder button for an order
  *
  * This function:
  * 1. Finds the order card by orderId
  * 2. Clicks the "Repetir encomenda" button
- * 3. Handles the modal that appears (replace vs add to cart)
+ * 3. Waits for modal to appear using MutationObserver
  * 4. Clicks the appropriate modal button based on mode
  */
-function handleOrderReorder(message: OrderReorderRequest): ExtensionResponse {
+async function handleOrderReorder(message: OrderReorderRequest): Promise<ExtensionResponse> {
   const { orderId, mode } = message.payload;
 
-  // Validate we're on order history page
-  if (!isOnOrderHistoryPage()) {
+  // Validate we're on order history or order detail page
+  const url = window.location.href;
+  const urlChecks = {
+    isOnOrderHistoryPage: isOnOrderHistoryPage(),
+    hasDetalhesEncomenda: url.includes('detalhes-encomenda'),
+    hasOrderID: url.includes('orderID='),
+    hasEncomenda: url.includes('/encomenda/'),
+    hasOrder: url.includes('/order/'),
+    hasHistorico: url.includes('/historico'),
+  };
+  const isOrderPage = Object.values(urlChecks).some(v => v);
+
+  logger.info('ContentScript', 'URL check for order.reorder', { url, urlChecks, isOrderPage });
+
+  if (!isOrderPage) {
     return createErrorResponse(
       message.id,
       'WRONG_PAGE',
-      'Not on order history page. Cannot reorder.',
-      { currentUrl: window.location.href }
+      'Not on order page. Cannot reorder.',
+      { currentUrl: url }
     );
   }
 
   try {
-    // Find order card with matching orderId
-    const orderCards = Array.from(document.querySelectorAll('.auc-orders__order-card'));
-    let targetCard: Element | null = null;
+    // First, try to find a reorder button anywhere on the page (for order detail pages)
+    // Note: button:has-text() is Playwright syntax, not valid CSS - removed
+    let reorderButton = document.querySelector(
+      '.auc-orders__reorder-button, ' +
+      '[data-testid="reorder-button"], ' +
+      'button[class*="reorder"], ' +
+      'a[class*="reorder"], ' +
+      '[class*="repeat-order"]'
+    ) as HTMLButtonElement | null;
 
-    for (const card of orderCards) {
-      const orderIdElement = card.querySelector('.auc-orders__order-number span:nth-child(2)');
-      const cardOrderId = orderIdElement?.textContent?.trim();
+    logger.info('ContentScript', 'CSS selector search result', {
+      found: !!reorderButton,
+      selector: reorderButton?.className || null,
+    });
 
-      if (cardOrderId === orderId) {
-        targetCard = card;
-        break;
+    // Also try finding by button text
+    if (!reorderButton) {
+      const buttons = Array.from(document.querySelectorAll('button, a.btn, a.button, a[class*="btn"]'));
+      const buttonTexts = buttons.slice(0, 20).map(btn => ({
+        tag: btn.tagName,
+        text: btn.textContent?.trim().substring(0, 50),
+        className: btn.className?.substring(0, 50),
+      }));
+      logger.info('ContentScript', 'Scanning buttons for reorder text', {
+        totalButtons: buttons.length,
+        sampleButtons: buttonTexts,
+      });
+
+      reorderButton = buttons.find(btn => {
+        const text = btn.textContent?.toLowerCase() || '';
+        return text.includes('repetir') || text.includes('reorder') || text.includes('voltar a encomendar');
+      }) as HTMLButtonElement | null;
+
+      if (reorderButton) {
+        logger.info('ContentScript', 'Found reorder button by text', {
+          text: reorderButton.textContent?.trim(),
+          className: reorderButton.className,
+        });
       }
     }
 
-    if (!targetCard) {
-      return createErrorResponse(
-        message.id,
-        'ELEMENT_NOT_FOUND',
-        `Order ${orderId} not found on page`,
-        { orderId }
-      );
+    // If on order history list, find specific order card
+    if (!reorderButton && isOnOrderHistoryPage()) {
+      const orderCards = Array.from(document.querySelectorAll('.auc-orders__order-card'));
+      let targetCard: Element | null = null;
+
+      for (const card of orderCards) {
+        const orderIdElement = card.querySelector('.auc-orders__order-number span:nth-child(2)');
+        const cardOrderId = orderIdElement?.textContent?.trim();
+
+        if (cardOrderId === orderId) {
+          targetCard = card;
+          break;
+        }
+      }
+
+      if (targetCard) {
+        reorderButton = targetCard.querySelector('.auc-orders__reorder-button') as HTMLButtonElement | null;
+
+        // If no reorder button on card, click to expand/navigate to details
+        if (!reorderButton) {
+          logger.info('ContentScript', 'Reorder button not visible, clicking order to expand', { orderId });
+
+          const orderLink = targetCard.querySelector('a, .auc-orders__order-header, .auc-orders__order-number') as HTMLElement | null;
+          if (orderLink) {
+            orderLink.click();
+
+            return createSuccessResponse(message.id, {
+              orderId,
+              mode,
+              clicked: false,
+              expanded: true,
+              message: 'Clicked order to expand. Reorder button should appear.',
+            });
+          }
+        }
+      }
     }
 
-    // Find and click the reorder button
-    const reorderButton = targetCard.querySelector('.auc-orders__reorder-button') as HTMLButtonElement | null;
-
     if (!reorderButton) {
+      logger.info('ContentScript', 'Reorder button not found', { orderId, url: window.location.href });
       return createErrorResponse(
         message.id,
         'ELEMENT_NOT_FOUND',
         `Reorder button not found for order ${orderId}`,
-        { orderId }
+        { orderId, url: window.location.href }
       );
     }
 
-    // Click the button
-    reorderButton.click();
+    logger.info('ContentScript', 'Found reorder button, clicking', { orderId });
 
-    // Wait for modal to appear (short delay)
-    setTimeout(() => {
-      handleReorderModal(mode);
-    }, 500);
+    // Click the reorder button using both methods for maximum compatibility
+    // Some React/Vue sites need proper mouse events, not just .click()
+    simulateRealClick(reorderButton);
+
+    // CRITICAL: Wait for modal to appear using MutationObserver
+    logger.info('ContentScript', 'Waiting for reorder modal...');
+    const modal = await waitForModal(5000);
+
+    if (!modal) {
+      logger.warn('ContentScript', 'Modal did not appear after clicking reorder');
+      return createSuccessResponse(message.id, {
+        orderId,
+        mode,
+        clicked: true,
+        modalHandled: false,
+        message: 'Reorder clicked but no modal appeared',
+      });
+    }
+
+    logger.info('ContentScript', 'Modal appeared, handling...');
+
+    // Handle modal based on mode
+    const modalResult = await handleModalWithinContainer(modal, mode);
 
     return createSuccessResponse(message.id, {
       orderId,
       mode,
       clicked: true,
+      modalHandled: modalResult.handled,
+      buttonClicked: modalResult.buttonClicked,
     });
+
   } catch (error) {
+    // Properly serialize error for logging
+    logger.error('ContentScript', 'Error in handleOrderReorder', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return createErrorResponse(
       message.id,
       'UNKNOWN',
-      'Failed to click reorder button',
-      error
+      error instanceof Error ? error.message : 'Failed to click reorder button',
+      { stack: error instanceof Error ? error.stack : undefined }
     );
   }
 }
 
 /**
- * Handle the reorder modal that appears after clicking reorder
- *
- * Auchan shows a modal with two options:
- * - "Substituir carrinho" (Replace cart)
- * - "Adicionar ao carrinho" (Add to cart)
- *
- * @param mode - 'replace' or 'add'
+ * Result from modal handling
  */
-function handleReorderModal(mode: 'replace' | 'add'): void {
+interface ModalHandleResult {
+  handled: boolean;
+  buttonClicked: string | null;
+}
+
+/**
+ * Handle the reorder modal within a given container element
+ *
+ * Auchan shows a modal with two options depending on cart state:
+ * - If cart has items: "Juntar" (merge) or "Eliminar" (replace)
+ * - If cart empty: "Encomendar de novo" (reorder) confirmation
+ *
+ * This version searches within the modal container using CSS-only selectors.
+ *
+ * @param modal - The modal element to search within
+ * @param mode - 'replace' or 'merge'
+ */
+async function handleModalWithinContainer(
+  modal: Element,
+  mode: 'replace' | 'merge'
+): Promise<ModalHandleResult> {
+  // First, dismiss any blocking popups (subscription prompts, etc.)
+  const interactor = new ExtensionPageInteractor();
   try {
-    // Find modal container
-    const modal = document.querySelector('.modal.show, [role="dialog"]');
-
-    if (!modal) {
-      logger.warn('ContentScript', 'Reorder modal not found. It may appear later.');
-      return;
+    const dismissed = await interactor.dismissPopups(POPUP_PATTERNS);
+    if (dismissed > 0) {
+      logger.info('ContentScript', `Dismissed ${dismissed} popups before modal handling`);
+      await new Promise(r => setTimeout(r, 500));
     }
-
-    // Find buttons in modal
-    // Replace button typically has classes like "btn-primary" or text "Substituir"
-    // Add button typically has classes like "btn-secondary" or text "Adicionar"
-
-    const buttons = Array.from(modal.querySelectorAll('button'));
-
-    let targetButton: HTMLButtonElement | null = null;
-
-    if (mode === 'replace') {
-      // Look for "Substituir" button
-      targetButton = buttons.find((btn) => {
-        const text = btn.textContent?.toLowerCase() || '';
-        return text.includes('substituir') || text.includes('replace');
-      }) as HTMLButtonElement | undefined || null;
-    } else {
-      // Look for "Adicionar" button
-      targetButton = buttons.find((btn) => {
-        const text = btn.textContent?.toLowerCase() || '';
-        return text.includes('adicionar') || text.includes('add');
-      }) as HTMLButtonElement | undefined || null;
-    }
-
-    if (targetButton) {
-      logger.info('ContentScript', `Clicking ${mode} button in modal`);
-      targetButton.click();
-    } else {
-      logger.warn('ContentScript', `Could not find ${mode} button in modal`);
-    }
-  } catch (error) {
-    logger.error('ContentScript', 'Error handling reorder modal', error);
+  } catch (e) {
+    // Popup dismissal failure is non-critical, continue
+    logger.warn('ContentScript', 'Popup dismissal failed, continuing', {
+      error: e instanceof Error ? e.message : String(e)
+    });
   }
+
+  // Check for cart removal warning first - this is a safety check
+  const modalText = modal.textContent?.toLowerCase() || '';
+  if (modalText.includes(MODAL_SELECTORS.cartRemovalText)) {
+    logger.warn('ContentScript', 'Cart removal modal detected - clicking Cancel');
+    const cancelBtn = findButtonByText(modal, MODAL_SELECTORS.cancelButtonTexts);
+    if (cancelBtn) {
+      const btnText = cancelBtn.textContent?.trim() || '';
+      if (!isDangerousText(btnText)) {
+        cancelBtn.click();
+        logger.info('ContentScript', 'Cart removal modal dismissed via Cancel');
+        return { handled: true, buttonClicked: 'cancel' };
+      }
+    }
+    logger.warn('ContentScript', 'Could not find cancel button for cart removal modal');
+    return { handled: false, buttonClicked: null };
+  }
+
+  // Handle based on mode
+  if (mode === 'merge') {
+    const mergeBtn = findButtonByText(modal, MODAL_SELECTORS.mergeButtonTexts);
+    if (mergeBtn) {
+      const btnText = mergeBtn.textContent?.trim() || '';
+      if (!isDangerousText(btnText)) {
+        logger.info('ContentScript', 'Clicking merge button', { text: btnText });
+        mergeBtn.click();
+        return { handled: true, buttonClicked: 'merge' };
+      } else {
+        logger.warn('ContentScript', 'BLOCKED: dangerous button detected', { text: btnText });
+      }
+    } else {
+      logger.warn('ContentScript', 'Merge button not found, trying confirm button');
+    }
+  }
+
+  // Replace mode or merge button not found - try confirm button
+  const confirmBtn = findButtonByText(modal, MODAL_SELECTORS.confirmButtonTexts);
+  if (confirmBtn) {
+    const btnText = confirmBtn.textContent?.trim() || '';
+    if (!isDangerousText(btnText)) {
+      logger.info('ContentScript', 'Clicking confirm button', { text: btnText });
+      confirmBtn.click();
+      return { handled: true, buttonClicked: 'confirm' };
+    } else {
+      logger.warn('ContentScript', 'BLOCKED: dangerous button detected', { text: btnText });
+    }
+  }
+
+  logger.warn('ContentScript', 'No appropriate button found in modal', {
+    mode,
+    modalTextPreview: modalText.substring(0, 200),
+  });
+  return { handled: false, buttonClicked: null };
 }
 
 /**

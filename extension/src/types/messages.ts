@@ -145,7 +145,8 @@ export interface OrderReorderRequest extends ExtensionMessage {
   action: 'order.reorder';
   payload: {
     orderId: string;
-    mode: 'replace' | 'add';
+    /** 'replace' clears cart first, 'merge' adds to existing cart */
+    mode: 'replace' | 'merge';
   };
 }
 

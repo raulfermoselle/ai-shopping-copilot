@@ -22,3 +22,8 @@ export {
   ChromeAlarmsAdapter,
   createAlarmsAdapter,
 } from './alarms-adapter.js';
+export {
+  ChromeLLMAdapter,
+  getLLMAdapter,
+  resetLLMAdapter,
+} from './llm-adapter.js';

@@ -10,8 +10,10 @@ import type { CartItem } from './cart.js';
  * Order summary from order history list
  */
 export interface OrderSummary {
-  /** Order ID */
+  /** Order ID (display number, e.g., "002915480") */
   orderId: string;
+  /** Detail page URL with UUID (e.g., "/pt/detalhes-encomenda?orderID=...") */
+  detailUrl?: string;
   /** Order date */
   date: string;
   /** Order date as timestamp */
