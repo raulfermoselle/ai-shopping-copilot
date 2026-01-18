@@ -3,8 +3,9 @@
 **Title**: BrowserMCP Cart Merge (Agentic Baseline)
 **Module**: BrowserMCP (Integration)
 **Sprint ID**: BrowserMCP-I-001
-**Status**: ACTIVE
+**Status**: COMPLETED
 **Started**: 2026-01-18
+**Completed**: 2026-01-18
 **Branch**: `feature/002-browsermcp-cart-merge`
 
 ---
@@ -43,18 +44,18 @@
 | T003 | Verify BrowserMCP connection | Setup | COMPLETED | 1 | Screenshot received via BrowserMCP tools |
 | T004 | Discover BrowserMCP capabilities | Harness | COMPLETED | 1 | 12 tools documented, no browser_evaluate |
 | T005 | Implement capture_state pattern | Harness | COMPLETED | 2 | Procedure documented in automation/harness/CAPTURE-STATE.md |
-| T006 | Create artifact persistence | Harness | PENDING | 2 | Artifacts readable in `runs/{timestamp}/{step}/` |
-| T007 | Implement auth verification | Workflow | PENDING | 1 | Detect logged-in vs logged-out state |
-| T008 | Navigate to order history | Workflow | PENDING | 1 | Discover URL pattern for orders page |
-| T009 | Extract last 3 orders | Workflow | PENDING | 1 | Parse order dates, select 3 most recent |
-| T010 | Implement order merge loop | Workflow | PENDING | 2 | Handle platform prompts, classify errors |
-| T011 | Extract cart contents | Workflow | PENDING | 1 | Parse cart items and quantities |
-| T012 | Generate natural language report | Workflow | PENDING | 1 | Report: orders found, merged, items, unavailable |
-| T013 | Implement checkout blocker | Guardrails | PENDING | 1 | Block clicks on checkout buttons |
-| T014 | Generate Review Pack | Guardrails | PENDING | 2 | Cart diff + screenshots + action timeline |
-| T015 | Full workflow validation | Guardrails | PENDING | 2 | End-to-end: auth→orders→merge→report→stop |
+| T006 | Create artifact persistence | Harness | COMPLETED | 2 | Artifacts readable in `runs/{timestamp}/{step}/` |
+| T007 | Implement auth verification | Workflow | COMPLETED | 1 | Detect logged-in vs logged-out state |
+| T008 | Navigate to order history | Workflow | COMPLETED | 1 | Discover URL pattern for orders page |
+| T009 | Extract last 3 orders | Workflow | COMPLETED | 1 | Parse order dates, select 3 most recent |
+| T010 | Implement order merge loop | Workflow | COMPLETED | 2 | Handle platform prompts, classify errors |
+| T011 | Extract cart contents | Workflow | COMPLETED | 1 | Parse cart items and quantities |
+| T012 | Generate natural language report | Workflow | COMPLETED | 1 | Report: orders found, merged, items, unavailable |
+| T013 | Implement checkout blocker | Guardrails | COMPLETED | 1 | Block clicks on checkout buttons |
+| T014 | Generate Review Pack | Guardrails | COMPLETED | 2 | Cart diff + screenshots + action timeline |
+| T015 | Full workflow validation | Guardrails | COMPLETED | 2 | End-to-end: auth→orders→merge→report→stop |
 
-**Totals**: 15 tasks, 21 points. Completed: 5 tasks, 6 points. Remaining: 10 tasks, 15 points.
+**Totals**: 15 tasks, 21 points. Completed: 15 tasks, 21 points. Remaining: 0 tasks, 0 points.
 
 ---
 

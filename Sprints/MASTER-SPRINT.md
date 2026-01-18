@@ -38,7 +38,7 @@
 | Global | - | - | G-001, G-002 | Complete |
 | CartBuilder | CB-R-001 | CB-A-001 | CB-I-001 | Complete |
 | Coordinator | - | CO-A-001 | CO-I-001 | Complete |
-| BrowserMCP | - | - | BrowserMCP-I-001 (ACTIVE) | Implementation In Progress |
+| BrowserMCP | - | - | BrowserMCP-I-001 | Complete |
 | Substitution | SU-R-001 | - | - | Research Complete |
 | SlotScout | SS-R-001 (60%) | - | - | Blocked |
 | StockPruner | - | - | - | Not Started |
@@ -53,7 +53,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
-| feature/002-browsermcp-cart-merge | BrowserMCP-I-001 | ACTIVE | 2026-01-18 | 2026-01-18 |
+| feature/002-browsermcp-cart-merge | BrowserMCP-I-001 | COMPLETED | 2026-01-18 | 2026-01-18 |
 | feat/chrome-extension | Sprint-EXT-I-002 | Abandoned (Pivot to browserMCP) | 2026-01-17 | 2026-01-18 |
 | main | None | Idle | - | 2026-01-16 |
 
@@ -64,7 +64,7 @@
 | Metric | Value |
 |--------|-------|
 | Total Sprints | 12 |
-| Completed | 10 |
+| Completed | 11 |
 | Blocked | 1 |
 | Ready to Start | 1 |
 | Test Count | 415+ |
@@ -76,7 +76,7 @@
 ## Sprint Queue (Prioritized)
 
 ### Priority 1 (Currently Active)
-- **BrowserMCP-I-001**: Cart Merge - Agentic Baseline (11 of 15 tasks pending, Phase 0 complete)
+None - ready for next sprint selection
 
 ### Priority 2 (Ready to Start)
 - **Sprint-SU-A-001**: Substitution Architecture (research complete, ready to start)
@@ -84,6 +84,9 @@
 
 ### Priority 3 (Blocked)
 - **Sprint-SS-R-001**: SlotScout Research (60% complete, awaiting user manual research)
+
+### Recently Completed
+- **BrowserMCP-I-001**: Cart Merge - Agentic Baseline (15/15 tasks, 21 points, completed 2026-01-18)
 
 ### Backlog
 - Sprint-SU-I-001: Substitution Implementation (needs SU-A-001)
@@ -98,6 +101,7 @@
 
 | Date | Sprint | Module | Summary |
 |------|--------|--------|---------|
+| 2026-01-18 | BrowserMCP-I-001 | BrowserMCP | Implementation: 15 tasks, 21 points, `/shoppingcopilot.merge-orders` command, token-optimized cart merge (100 compactions reduced to 0), 3-order workflow validated, Review Pack + validation artifacts |
 | 2026-01-18 | EXT-I-002 | Extension | Abandoned - 9 tasks completed (manifest, UI, tests), approach unworkable beyond order history. Pivot to browserMCP bridge. Learned: content scripts cannot maintain state across page reloads. |
 | 2026-01-16 | EXT-A-001 | Extension | Architecture: 7 tasks, hexagonal design, 6 port interfaces, state machine, 10 ADRs |
 | 2026-01-16 | EXT-R-001 | Extension | Research: 7 tasks, architecture validated, prototype created, GO recommendation |
@@ -107,7 +111,6 @@
 | 2026-01-11 | CB-A-001 | CartBuilder | Architecture: Zod schemas, worker interface |
 | 2026-01-11 | CB-R-001 | CartBuilder | Research: 30 selectors, reorder button discovery |
 | 2026-01-11 | SU-R-001 | Substitution | Research: product search, 32 selectors |
-| 2026-01-11 | G-002 | Global | Login automation, Selector Registry system |
 
 ---
 
@@ -165,33 +168,29 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 ## Notes for Current Session
 
 - **Phase 1 Foundation Complete** - All 7 foundation sprints finished
-- **Phase 2 In Progress** - Architecture pivot for Extension module, BrowserMCP-I-001 now active
-- **Architecture Pivot Decision (2026-01-18)**:
+- **Phase 2 In Progress** - BrowserMCP-I-001 just completed, next sprint ready to start
+- **Architecture Pivot (2026-01-18)**:
   - **Sprint-EXT-I-002 Abandoned**: Chrome extension-only approach proven unworkable
   - Content scripts lose state across page reloads during automation
   - Issue: Auchan.pt reloads page during reorder flow, breaking state
-  - Solution: Transition to browserMCP bridge architecture
+  - Solution: Transitioned to browserMCP bridge architecture
   - Extension becomes thin UI client, MCP server handles automation
   - Reuses popup UI, manifest, esbuild config from abandoned sprint
-- **Sprint Creation (2026-01-18)**:
-  - **BrowserMCP-I-001 CREATED AND ACTIVE** - Cart Merge implementation
-  - 15 tasks (T001-T015), 21 story points
-  - Phase 0 (Setup) completed pre-sprint: T001-T003 done
-  - T004 (Tool discovery) completed: 12 tools available
-  - Remaining: 11 tasks (T005-T015), 17 points across Harness/Workflow/Guardrails phases
-  - Sequential execution required (tight dependencies)
-- **Sprint Start Session (2026-01-18 Sprint Start)**:
-  - **STATUS: T001-T006 COMPLETE, NEXT TASK: T007**
-  - Phase 0 (Setup): T001-T003 ✓ Complete
-  - Phase 1 (Harness): T004-T006 ✓ Complete (T005 = procedure, T006 = artifact persistence ready)
-  - Phase 2 (Workflow): T007-T012 - **READY TO BEGIN**
-  - Phase 3 (Guardrails): T013-T015 - Pending Phase 2
-  - **Next Task**: T007 (Auth verification) - Detect logged-in vs logged-out state
-- **Other Ready Sprints**:
-  - **Sprint-SU-A-001** - Substitution Architecture (ready to start after BrowserMCP advances)
-  - **Sprint-CP-I-001** - Control Panel Implementation (ready to start)
+- **Sprint Completed (2026-01-18)**:
+  - **BrowserMCP-I-001 COMPLETED** - Cart Merge implementation
+  - 15 tasks (T001-T015), 21 story points all delivered
+  - Phases executed: Setup → Harness → Workflow → Guardrails
+  - Deliverables: `/shoppingcopilot.merge-orders` command, token-optimized cart merge
+  - Key achievement: Reduced potential ~100 context compactions to 0 through optimization
+  - Single-day completion (6 sessions), high-velocity delivery
+- **Principles Crystallized**:
+  - Autonomous Feedback Loops: capture_state pattern enables agents to validate without manual intervention
+  - Token Budget Optimization: Direct URLs + UUID extraction + grep filters reduce context by >50%
+- **Next Sprint Options**:
+  - **Sprint-SU-A-001** - Substitution Architecture (RECOMMENDED - research complete, unblocks SU-I-001)
+  - **Sprint-CP-I-001** - Control Panel Implementation (ready, unblocked by CO-I-001)
 - **Blocked**: SS-R-001 needs user to manually research delivery slot page
 
 ---
 
-*Last Updated: 2026-01-18 15:45 (Sprint Start Session - T001-T006 Complete, T007 Ready, Workflow Phase Next)*
+*Last Updated: 2026-01-18 (Sprint BrowserMCP-I-001 COMPLETED - Ready for next sprint)*
