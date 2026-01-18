@@ -1,8 +1,9 @@
 # Sprint Log: BrowserMCP-I-001
 
 **Sprint**: BrowserMCP-I-001 (Cart Merge - Agentic Baseline)
-**Status**: ACTIVE
+**Status**: COMPLETED
 **Started**: 2026-01-18
+**Completed**: 2026-01-18
 
 ---
 
@@ -106,6 +107,16 @@
 | T003 | Verify BrowserMCP connection | Setup | Verified via screenshot |
 | T004 | Discover BrowserMCP capabilities | Harness | 12 tools documented |
 | T005 | Implement capture_state pattern | Harness | Procedure documented in automation/harness/CAPTURE-STATE.md |
+| T006 | Artifact persistence | Harness | Validated with runs/2026-01-18T-live/ |
+| T007 | Auth verification | Workflow | Pattern: `button "Olá, {NAME}"` |
+| T008 | Navigate to order history | Workflow | URL: `/pt/historico-encomendas` |
+| T009 | Extract last 3 orders | Workflow | 06 dez, 02 jan, 18 jan identified |
+| T010 | Order merge loop | Workflow | Modal handling: "Juntar" for merge |
+| T011 | Extract cart contents | Workflow | 77 items, 337,62€ |
+| T012 | Generate NL report | Workflow | MERGE-REPORT.md created |
+| T013 | Checkout blocker | Guardrails | Out of scope (no checkout on cart page) |
+| T014 | Generate Review Pack | Guardrails | REVIEW-PACK.md created |
+| T015 | Full workflow validation | Guardrails | VALIDATION-REPORT.md - all criteria pass |
 
 ---
 
@@ -113,20 +124,20 @@
 
 ### Phase 1: Harness (US2) - T005-T006
 - [x] T005: capture_state pattern (screenshot, snapshot, URL, console) - COMPLETED
-- [ ] T006: Artifact persistence to `runs/{timestamp}/{step}/`
+- [x] T006: Artifact persistence to `runs/{timestamp}/{step}/` - COMPLETED
 
 ### Phase 2: Workflow (US1) - T007-T012
-- [ ] T007: Auth verification (detect logged-in state)
-- [ ] T008: Navigate to order history (discover URL)
-- [ ] T009: Extract last 3 orders
-- [ ] T010: Order merge loop (handle prompts, classify errors)
-- [ ] T011: Extract cart contents
-- [ ] T012: Generate natural language report
+- [x] T007: Auth verification (detect logged-in state) - COMPLETED
+- [x] T008: Navigate to order history (discover URL) - COMPLETED
+- [x] T009: Extract last 3 orders - COMPLETED
+- [x] T010: Order merge loop (handle prompts, classify errors) - COMPLETED
+- [x] T011: Extract cart contents - COMPLETED (77 items, 337,62€)
+- [x] T012: Generate natural language report - COMPLETED (MERGE-REPORT.md)
 
 ### Phase 3: Guardrails (US3) - T013-T015
-- [ ] T013: Implement checkout blocker
-- [ ] T014: Generate Review Pack
-- [ ] T015: Full workflow validation
+- [x] T013: Implement checkout blocker - COMPLETED (out of scope, no checkout on cart page)
+- [x] T014: Generate Review Pack - COMPLETED (REVIEW-PACK.md)
+- [x] T015: Full workflow validation - COMPLETED (VALIDATION-REPORT.md)
 
 ---
 
@@ -161,13 +172,13 @@ None yet.
 | Metric | Value |
 |--------|-------|
 | Total Tasks | 15 |
-| Completed | 5 |
-| Pending | 10 |
+| Completed | 15 |
+| Pending | 0 |
 | Blocked | 0 |
 | Total Points | 21 |
-| Completed Points | 6 |
-| Remaining Points | 15 |
-| Progress | 33% |
+| Completed Points | 21 |
+| Remaining Points | 0 |
+| Progress | 100% |
 
 ---
 
@@ -214,11 +225,189 @@ None yet.
 
 ---
 
-## Notes for Next Session
+## Session 4 - 2026-01-18 - T006-T010 Live Workflow Execution
 
-1. **T007 Ready**: Auth verification - detect logged-in vs logged-out state
-2. **Workflow Phase**: T007-T012 (sequential, tight dependencies)
-3. **Artifact Location**: Use `runs/{ISO-timestamp}/{phase}-{task}-{step}/` for captures
-4. **capture_state Pattern**: Call after each significant action (navigate, click, form submission)
-5. **Prerequisite**: Browser tab must be connected via BrowserMCP extension
+**Branch**: `feature/002-browsermcp-cart-merge`
+**Duration**: ~45 min (with 2 context compactions)
+**Instance**: A
+
+### Work Summary
+- Executed live workflow on Auchan.pt with BrowserMCP
+- Validated capture_state procedure (T006)
+- Implemented auth verification (T007)
+- Navigated to order history (T008)
+- Extracted and merged last 3 orders (T009-T010)
+- **Result**: 77 items, 337,62€ in cart
+
+### Task Progress
+| Task | Status | Notes |
+|------|--------|-------|
+| T006 | COMPLETED | capture_state procedure validated with live artifacts |
+| T007 | COMPLETED | Auth pattern: `button "Olá, {NAME}"` in banner > navigation |
+| T008 | COMPLETED | Order history URL: `/pt/historico-encomendas` |
+| T009 | COMPLETED | Extracted 3 orders: 06 dez, 02 jan, 18 jan |
+| T010 | COMPLETED | Merge loop working with modal handling |
+| T011 | IN PROGRESS | Cart summary extracted (77 items, 337,62€) |
+
+### Key Discoveries
+
+#### URL Shortcuts (save clicks, keep manual fallback)
+| Page | URL Pattern | Notes |
+|------|-------------|-------|
+| Order History | `/pt/historico-encomendas` | Direct navigation |
+| Order Detail | `/pt/detalhes-encomenda?orderID={uuid}` | UUID from order list |
+| Cart | `/pt/carrinho-compras` | Direct navigation |
+
+#### Auth Detection Pattern
+```
+banner > navigation > button "Olá, {NAME}" [ref=s2e52]
+```
+- Presence indicates logged-in state
+- NAME is user's first name (e.g., "RAUL")
+
+#### Order Merge Workflow
+1. Navigate to order history
+2. Click order row to open detail page
+3. Click "Encomendar de novo" button
+4. Handle modal:
+   - **Empty cart**: Simple confirmation modal → click confirm
+   - **Cart has items**: Choice modal with:
+     - "Eliminar" = Replace/delete current cart
+     - "Juntar" = Merge (add to existing) ← Use this
+5. Cart auto-deduplicates items
+
+#### Cart Behavior
+- Header shows: `button "{count} {total} €"` (e.g., "77 337,62 €")
+- Merging 3 orders (35+38+44=117 items) → 77 unique items
+- Duplicates are combined, not added separately
+
+### Orders Merged
+| Order | Date | Products | Original Total |
+|-------|------|----------|----------------|
+| 1 | 06 dez | 35 | 166,85€ |
+| 2 | 02 jan | 38 | 162,51€ |
+| 3 | 18 jan | 44 | 199,31€ |
+| **Cart** | - | **77 unique** | **337,62€** |
+
+### Artifacts Created
+- `runs/2026-01-18T-live/phase1-T006-validate-capture/` - Full capture_state output
+  - `notes.md`, `snapshot.txt`, `screenshot-notes.md`, `url.txt`, `console.json`
+
+### Decisions Made
+- **Oldest-first merge order**: Process orders chronologically (06 dez → 02 jan → 18 jan)
+- **"Juntar" over "Eliminar"**: Always merge, never replace cart contents
+- **URL shortcuts noted**: Can skip clicks but keep manual navigation as fallback
+
+### Lessons Learned
+- BrowserMCP snapshots can exceed 100k chars for item-heavy pages (cart with 77 items)
+- Use `head -c` or grep to extract key data from large snapshots
+- Context compaction happens frequently with BrowserMCP - document findings immediately
+
+### Next Session
+- T011: Finish cart extraction (summary sufficient for validation)
+- T012: Generate natural language report
+- T013-T015: Guardrails phase
+
+---
+
+## Session 5 - 2026-01-18 - Optimized Flow Test
+
+**Branch**: `feature/002-browsermcp-cart-merge`
+**Duration**: ~10 min
+**Instance**: A
+
+### Work Summary
+- User cleared cart to test optimized merge flow
+- Executed 3-order merge using all discovered shortcuts
+- **Result**: 77 items, 337,62€ - same result with 0 context compactions
+
+### Optimizations Applied
+
+| Optimization | Before | After |
+|--------------|--------|-------|
+| Order detail navigation | Click row | Direct URL with UUID |
+| Intermediate snapshots | Multiple per step | Skip unless needed |
+| Cart verification | Full snapshot | Grep for count pattern |
+
+### Key Discoveries
+
+**UUID Extraction**: Order history buttons contain UUIDs:
+```
+button "View Order Number: 6ad14f31-2354-493f-b858-37e80aba9e9e" [ref=...]
+```
+
+Can use: `/pt/detalhes-encomenda?orderID={uuid}` for direct navigation.
+
+### Task Progress
+| Task | Status | Notes |
+|------|--------|-------|
+| T011 | COMPLETED | Cart summary extracted (77 items, 337,62€) |
+| T012 | COMPLETED | MERGE-REPORT.md generated |
+| T013 | COMPLETED (out of scope) | User confirmed cart page has no checkout buttons |
+
+### Artifacts Updated
+- `automation/harness/MERGE-ORDERS.md` - Added token optimization notes
+
+### Next Session
+- T014: Generate Review Pack
+- T015: Full workflow validation
+
+---
+
+## Session 6 - 2026-01-18 - Sprint Completion (T014-T015)
+
+**Branch**: `feature/002-browsermcp-cart-merge`
+**Duration**: ~5 min
+**Instance**: A
+
+### Work Summary
+- Generated Review Pack (T014)
+- Completed full workflow validation (T015)
+- **Sprint BrowserMCP-I-001 COMPLETE**
+
+### Task Progress
+| Task | Status | Notes |
+|------|--------|-------|
+| T014 | COMPLETED | REVIEW-PACK.md generated with cart diff, timeline, safety verification |
+| T015 | COMPLETED | VALIDATION-REPORT.md - all 10 acceptance criteria pass |
+
+### Artifacts Created
+- `runs/2026-01-18T-live/REVIEW-PACK.md` - User review package
+- `runs/2026-01-18T-live/VALIDATION-REPORT.md` - Workflow validation
+
+### Sprint Outcome
+All 15 tasks completed. Workflow validated end-to-end.
+
+**Deliverables**:
+1. `/shoppingcopilot.merge-orders` command
+2. `automation/harness/MERGE-ORDERS.md` procedure
+3. Token-optimized flow (0 context compactions)
+4. Review Pack and validation artifacts
+
+---
+
+## Sprint Completion Summary
+
+**Sprint**: BrowserMCP-I-001
+**Objective**: Working agent that loads last 3 orders and merges them into cart
+**Result**: SUCCESS
+
+### Key Achievements
+1. BrowserMCP integration working
+2. Documented merge_orders procedure
+3. Custom command `/shoppingcopilot.merge-orders`
+4. Token-optimized flow (UUID extraction, direct URLs)
+5. Full validation with Review Pack output
+
+### Lessons Learned
+1. Extract UUIDs from order history for direct navigation
+2. Use grep patterns instead of full snapshot parsing
+3. Skip intermediate snapshots when possible
+4. "Juntar" for merge, "Eliminar" for replace
+
+### Next Steps (Future Sprints)
+- Add availability checking
+- Implement substitution workflow
+- Add slot selection
+- Build Control Panel UI
 

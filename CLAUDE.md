@@ -36,6 +36,14 @@ Any feedback that requires manual human relay breaks the autonomous iteration cy
 Pattern-based find-replace can corrupt quote characters, brackets, and delimiters. Prefer semantic-aware transformations or validate output manually after bulk replacements.
 *Source: Refactoring safety literature; LST/AST-aware tooling*
 
+### Minimize Context Window Consumption in Agentic Loops
+Large tool outputs (DOM snapshots, API responses, logs) can exhaust context windows and trigger compaction. Extract only required data points rather than processing entire outputs. Use filtering tools (grep, jq, head) to isolate relevant content before analysis.
+*Source: Emergent pattern in agentic browser automation (2025–2026)*
+
+### Prefer Direct Navigation Over Click Chains
+Each UI click introduces latency, failure risk, and context consumption. When identifiers (UUIDs, IDs, slugs) are visible in a page, extract them to construct direct URLs rather than clicking through intermediate pages.
+*Source: RPA efficiency patterns; reduced state machine complexity*
+
 ---
 
 ## Architecture Overview
@@ -80,6 +88,11 @@ Core agent systems
 ### Integrations (`integrations/`)
 External communication
 - `integrations/auchan-api.md` - Auchan.pt website automation
+
+### Automation Procedures (`automation/harness/`)
+Documented browser automation workflows
+- `automation/harness/CAPTURE-STATE.md` - State capture procedure for debugging
+- `automation/harness/MERGE-ORDERS.md` - Order merge workflow with URL patterns
 
 ---
 
@@ -259,6 +272,18 @@ for (const el of elements) {
 ```
 
 **Note**: Use string template (backticks) for `page.evaluate()` to bypass TypeScript DOM type errors (`document`, `HTMLElement` not recognized in Node context). The code runs in browser context where these types exist.
+
+### BrowserMCP Token Optimization (CRITICAL)
+
+BrowserMCP accessibility snapshots can exceed 100k characters for content-heavy pages, rapidly consuming context. Follow these rules:
+
+- **Extract via grep, not parsing**: Use `grep -oE 'pattern'` on snapshot files to isolate specific elements (cart count, auth state, UUIDs) rather than reading full snapshots into context. → *Principle: Minimize Context Window Consumption*
+
+- **Skip intermediate snapshots**: Only capture state when verification is required (auth check, final confirmation). Skip snapshots between sequential actions. → *Principle: Minimize Context Window Consumption*
+
+- **Extract identifiers for direct navigation**: List pages often embed IDs in element attributes (e.g., `button "View Order Number: {uuid}"`). Extract these to construct direct URLs instead of clicking rows. → *Principle: Prefer Direct Navigation Over Click Chains*
+
+- **Document discovered patterns**: When automating a new workflow, record URL patterns, element selectors, and modal behaviors in `automation/harness/{WORKFLOW}.md` for reuse.
 
 ---
 
@@ -466,6 +491,6 @@ node build.mjs --watch  # Watch mode
 
 ---
 
-**Last Updated:** 2026-01-17
+**Last Updated:** 2026-01-18
 **Project:** AI Shopping Copilot (AISC)
-**Current Sprint:** LLM Integration Complete
+**Current Sprint:** BrowserMCP-I-001 Complete
