@@ -298,10 +298,12 @@ export function adjustScore(
     }
   }
 
-  // 3. Category tolerance matching
-  const categoryTolerance = store.categoryTolerances.find(
-    (t) => t.category.toLowerCase() === original.category.toLowerCase()
-  );
+  // 3. Category tolerance matching (only if category is provided)
+  const categoryTolerance = original.category
+    ? store.categoryTolerances.find(
+        (t) => t.category.toLowerCase() === original.category!.toLowerCase()
+      )
+    : undefined;
 
   if (categoryTolerance && categoryTolerance.confidence > 0.3) {
     // Check brand tolerance
@@ -312,9 +314,9 @@ export function adjustScore(
     );
     factors.categoryTolerance = brandMatch * config.categoryToleranceWeight * config.maxAdjustmentMagnitude;
     if (brandMatch > 0) {
-      reasoning.push(`Brand change matches ${original.category} tolerance (${categoryTolerance.brandTolerance})`);
+      reasoning.push(`Brand change matches ${original.category ?? 'unknown'} tolerance (${categoryTolerance.brandTolerance})`);
     } else if (brandMatch < 0) {
-      reasoning.push(`Brand change outside ${original.category} tolerance (user is ${categoryTolerance.brandTolerance})`);
+      reasoning.push(`Brand change outside ${original.category ?? 'unknown'} tolerance (user is ${categoryTolerance.brandTolerance})`);
     }
 
     // 4. Price tolerance

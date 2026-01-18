@@ -2,21 +2,35 @@
   "schemaVersion": "1.0.0",
   "page": "search",
   "version": 1,
-  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/pesquisa",
-  "lastValidated": "2026-01-11T22:30:00Z",
-  "notes": "Product search results page. Shows grid of product tiles with search query, filters, and pagination. URL format: /pt/pesquisa?q={query}",
+  "urlPattern": "^https://(www\\.)?auchan\\.pt/pt/(pesquisa|search)",
+  "lastValidated": "2026-01-14T06:19:44Z",
+  "notes": "VERIFIED: Product search results page. Shows grid of product tiles with search query, filters, and pagination. URL format: /pt/pesquisa?q={query}. Captured 24 products in 'leite' search with full data-urls and data-gtm attributes.",
   "selectors": {
+    "searchInput": {
+      "name": "Search input field",
+      "primary": "input[name='q']",
+      "fallbacks": [
+        "#search-suggestions-input",
+        ".auc-search-field",
+        "input.search-field[type='text']"
+      ],
+      "score": 95,
+      "reason": "name attribute is stable, with ID and class fallbacks",
+      "verified": true,
+      "notes": "Main search input in header. Has autocomplete functionality with aria-autocomplete='list'.",
+      "dataAttributes": ["aria-label", "aria-autocomplete", "role", "aria-controls"]
+    },
     "resultsContainer": {
       "name": "Search results container",
       "primary": ".product-grid",
       "fallbacks": [
-        ".auc-product",
-        ".search-results"
+        "[itemtype='http://schema.org/SomeProducts']",
+        ".justify-content-start.product-grid"
       ],
-      "score": 75,
-      "reason": "Semantic class naming",
+      "score": 90,
+      "reason": "Semantic class with schema.org fallback verified",
       "verified": true,
-      "notes": "Main container for all product search results"
+      "notes": "Main container for all product search results. Has itemtype schema.org/SomeProducts."
     },
     "resultsCount": {
       "name": "Results count text",
@@ -43,15 +57,16 @@
     },
     "productTile": {
       "name": "Individual product card",
-      "primary": ".auc-product-tile",
+      "primary": ".product-tile[data-pid]",
       "fallbacks": [
-        ".auc-js-product-tile",
-        "[data-pid]"
+        ".auc-product-tile[data-pid]",
+        "[data-pid]:has(.auc-product-tile__name)"
       ],
-      "score": 85,
-      "reason": "BEM naming with data attribute fallback",
+      "score": 95,
+      "reason": "data-pid attribute is stable and unique identifier",
       "verified": true,
-      "notes": "Individual product card. Has data-pid attribute with unique product ID. This is the main container for each product in search results."
+      "notes": "Individual product card. Has data-pid, data-urls (JSON with endpoints), data-gtm (JSON with tracking), data-position. Full class: 'product-tile auc-product-tile auc-js-product-tile'.",
+      "dataAttributes": ["data-pid", "data-urls", "data-gtm", "data-gtm-new", "data-position", "data-producttype"]
     },
     "productId": {
       "name": "Product ID attribute",
@@ -119,16 +134,40 @@
       "notes": "Container for all price-related information"
     },
     "productPrice": {
-      "name": "Product price",
-      "primary": ".auc-product-tile__prices .price",
+      "name": "Current/main price",
+      "primary": ".auc-price__no-list .value",
       "fallbacks": [
-        ".auc-product-tile .price",
-        ".price"
+        ".auc-product-tile__prices .price .value",
+        ".auc-product-tile__prices .value"
+      ],
+      "score": 85,
+      "reason": "Nested class pattern verified in snapshot",
+      "verified": true,
+      "notes": "Actual selling price element. Format: '0,86 €'. Within .auc-product-tile__prices container."
+    },
+    "productPricePromo": {
+      "name": "Promotional price",
+      "primary": ".auc-price__promotion .value",
+      "fallbacks": [
+        ".price-promotion .value",
+        ".auc-product-tile__prices .promotion .value"
+      ],
+      "score": 85,
+      "reason": "Promotion class pattern verified",
+      "verified": true,
+      "notes": "Promotional/discounted price if applicable. Shows strikethrough or special styling."
+    },
+    "productPriceUnit": {
+      "name": "Unit price (per kg/L)",
+      "primary": ".auc-measures--price-per-unit",
+      "fallbacks": [
+        ".price-per-unit",
+        ".unit-price"
       ],
       "score": 80,
-      "reason": "Semantic class naming",
+      "reason": "BEM class verified in snapshot",
       "verified": true,
-      "notes": "Product price text (e.g., '0,86 €'). Parse first line of textContent."
+      "notes": "Unit price for comparison (e.g., '€0,86/L'). Below main price."
     },
     "productRating": {
       "name": "Product rating/reviews",
@@ -189,27 +228,41 @@
       "notes": "Promotional badge container (discounts, offers, etc.). NOT VERIFIED."
     },
     "productQuantitySelector": {
-      "name": "Quantity selector and add to cart controls",
+      "name": "Quantity selector widget",
       "primary": ".auc-product-tile__quantity-selector",
       "fallbacks": [
-        ".quantity-selector"
+        ".quantity-selector",
+        "[data-pid] .auc-js-quantity-selector"
       ],
-      "score": 75,
-      "reason": "BEM element naming",
+      "score": 90,
+      "reason": "BEM class verified in snapshot",
       "verified": true,
-      "notes": "Container for quantity selection and add to cart button"
+      "notes": "Quantity input and +/- buttons. Contains input[name='quantity'], .quantity-plus, .quantity-minus."
+    },
+    "quantityInput": {
+      "name": "Quantity input field",
+      "primary": ".auc-product-tile__quantity-selector input[name='quantity']",
+      "fallbacks": [
+        ".quantity-selector input.quantity",
+        "[data-pid] input.quantity-select"
+      ],
+      "score": 85,
+      "reason": "Name attribute stable",
+      "verified": true,
+      "notes": "Numeric input for product quantity. Within quantity selector."
     },
     "addToCartButton": {
       "name": "Add to cart button",
-      "primary": ".auc-product-tile__quantity-selector button.auc-js-add-to-cart",
+      "primary": ".auc-product-tile button.auc-button__rounded--primary",
       "fallbacks": [
-        ".auc-js-add-to-cart",
-        "button[class*='add-to-cart']"
+        "[data-pid] button.auc-button__rounded--primary",
+        ".product-tile button.auc-button__circle"
       ],
-      "score": 75,
-      "reason": "JS hook class with BEM context",
+      "score": 85,
+      "reason": "Button class verified in snapshot",
       "verified": true,
-      "notes": "Add to cart button. May be disabled if product unavailable. Classes: auc-button__circle auc-js-add-to-cart"
+      "notes": "Red circular button to add product to cart. Full class: 'auc-button__rounded--primary'. May be icon-only (no text).",
+      "safety": "READ_ONLY_DISCOVERY"
     },
     "wishlistButton": {
       "name": "Add to wishlist button",
@@ -223,17 +276,19 @@
       "verified": true,
       "notes": "Add to wishlist button within product tile"
     },
-    "unavailableIndicator": {
+    "outOfStockIndicator": {
       "name": "Out of stock indicator",
-      "primary": ".auc-product-tile--unavailable",
+      "primary": ".auc-product-tile.out-of-stock",
       "fallbacks": [
-        ".auc-product-tile[class*='unavailable']",
+        "[data-pid][data-availability='false']",
+        ".product-tile:has-text('Esgotado')",
+        ".product-tile:has-text('Indisponível')",
         ".auc-product-tile button[disabled]"
       ],
-      "score": 65,
-      "reason": "BEM modifier with attribute fallback",
+      "score": 70,
+      "reason": "Pattern needs verification - not observed in current snapshot",
       "verified": false,
-      "notes": "Indicates product is out of stock. May be class modifier on tile or disabled button. NOT VERIFIED - no unavailable products found in test searches."
+      "notes": "HYPOTHESIS: Out-of-stock products likely have disabled add-to-cart button or specific text ('Esgotado', 'Indisponível'). Needs verification with unavailable product. Screenshot shows all products available."
     },
     "sortDropdown": {
       "name": "Sort order dropdown",
@@ -280,24 +335,65 @@
       "description": "Extract search metadata",
       "fields": {
         "query": "searchKeywords (text content)",
-        "totalResults": "resultsCount (parse number from text)",
+        "totalResults": "resultsCount (parse number from text, e.g., '1,059 resultados para')",
         "currentPage": "URL parameter 'start' or 'page'"
       }
     },
-    "productList": {
-      "description": "Extract all products from search results",
+    "searchResults": {
+      "description": "Extract all visible product search results",
       "container": "resultsContainer",
       "item": "productTile",
       "fields": {
-        "pid": "productId [data-pid] (string)",
-        "name": "productName (text content)",
-        "price": "productPrice (parse currency from first line)",
-        "imageUrl": "productImage [src] (string)",
-        "imageAlt": "productImage [alt] (string)",
-        "productUrl": "productLink [href] (string)",
-        "hasRating": "productRating (boolean - exists check)",
-        "available": "NOT unavailableIndicator OR addToCartButton:not([disabled]) (boolean)"
+        "pid": "data-pid attribute (string)",
+        "name": "productName text content",
+        "price": "productPrice text content (parse '0,86 €' → 0.86)",
+        "pricePromo": "productPricePromo text content (if exists)",
+        "unitPrice": "productPriceUnit text content (e.g., '€0,86/L')",
+        "imageUrl": "productImage src attribute",
+        "imageAlt": "productImage alt attribute",
+        "productUrl": "data-urls attribute -> productUrl JSON field OR productLink href",
+        "addToCartUrl": "data-urls attribute -> addToCartUrl JSON field",
+        "position": "data-position attribute (number)",
+        "brand": "data-gtm attribute -> brand JSON field",
+        "category": "data-gtm attribute -> category JSON field",
+        "available": "NOT(outOfStockIndicator present) AND addToCartButton:not([disabled])",
+        "hasRating": "productRating (boolean - exists check)"
+      }
+    },
+    "productAvailability": {
+      "description": "Check if a specific product is available",
+      "item": "productTile[data-pid='<PID>']",
+      "fields": {
+        "available": "addToCartButton is enabled",
+        "outOfStock": "outOfStockIndicator present OR addToCartButton disabled"
       }
     }
-  }
+  },
+  "api": {
+    "addToCartEndpoint": "/on/demandware.store/Sites-AuchanPT-Site/pt_PT/Cart-AddProduct",
+    "updateQuantityEndpoint": "/on/demandware.store/Sites-AuchanPT-Site/pt_PT/Cart-UpdateQuantity",
+    "removeFromCartEndpoint": "/on/demandware.store/Sites-AuchanPT-Site/pt_PT/Cart-RemoveProductLineItem",
+    "quantitySelectorEndpoint": "/on/demandware.store/Sites-AuchanPT-Site/pt_PT/Product-QuantitySelector",
+    "notes": "Endpoints found in data-urls attribute of product tiles (JSON format)"
+  },
+  "knownIssues": [
+    {
+      "issue": "Out-of-stock indicator not verified",
+      "severity": "medium",
+      "description": "Need to verify selector for unavailable products. Current hypothesis is disabled button or 'Esgotado'/'Indisponível' text.",
+      "workaround": "Check if addToCartButton is disabled or missing"
+    },
+    {
+      "issue": "Lazy loading of products",
+      "severity": "low",
+      "description": "Products load as you scroll. Need scroll-to-load logic to capture all results beyond initial 24.",
+      "workaround": "Scroll down page incrementally and wait for new products to appear"
+    },
+    {
+      "issue": "Cookie consent popup",
+      "severity": "low",
+      "description": "Cookie consent banner may block interactions on first visit",
+      "workaround": "Dismiss with auto-popup-dismisser utility or force clicks"
+    }
+  ]
 }

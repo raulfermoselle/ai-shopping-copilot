@@ -27,7 +27,7 @@ import { Coordinator } from '../dist/agents/coordinator/coordinator.js';
 import type { ReviewPack as CoordinatorReviewPack } from '../dist/agents/coordinator/types.js';
 import type { ReviewPack as ControlPanelReviewPack, SlotOption, SuggestedRemoval, AddedItem, QuantityChange, UnavailableItem } from '../dist/control-panel/types.js';
 import { CLIRenderer } from '../dist/control-panel/cli-renderer.js';
-import { loadPurchaseHistoryFromFile } from '../dist/agents/stock-pruner/heuristics.js';
+// Purchase history loader (inline)
 
 // =============================================================================
 // Configuration
@@ -268,8 +268,17 @@ async function runSession(config: SessionConfig): Promise<void> {
     if (config.enableStockPruning) {
       console.log('Loading purchase history...');
       try {
-        purchaseHistory = loadPurchaseHistoryFromFile('data/memory/purchase-history.json');
-        console.log(`  Loaded ${purchaseHistory.length} purchase records`);
+        const historyPath = 'data/memory/purchase-history.json';
+        if (fs.existsSync(historyPath)) {
+          const data = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+          purchaseHistory = (data.records ?? data).map((r: { productName: string; purchaseDate: string; quantity: number; unitPrice: number; orderId: string }) => ({
+            ...r,
+            purchaseDate: new Date(r.purchaseDate),
+          }));
+          console.log(`  Loaded ${purchaseHistory.length} purchase records`);
+        } else {
+          console.log('  No purchase history file found');
+        }
       } catch (err) {
         console.log('  No purchase history found (will use empty)');
       }

@@ -219,6 +219,104 @@ Ranking criteria (in order of importance):
   } satisfies ToolInputSchema,
 };
 
+/**
+ * Tool for making a substitution decision with value optimization.
+ */
+export const makeSubstitutionDecisionTool: ToolDefinition = {
+  name: 'make_substitution_decision',
+  description: `Evaluate a substitute product with value optimization for a Portuguese household.
+
+Value Heuristics:
+1. STORE BRAND PREFERENCE: Prefer Auchan/Polegar when quality is equivalent
+2. PRICE-PER-UNIT: Compare €/kg or €/L, not just absolute price
+3. PRICE TOLERANCE: Max 20% increase unless no alternatives
+
+Decision Ratings:
+- strongly_recommend: Store brand or better value, under original price
+- recommend: Good match, within 10% price increase
+- acceptable: Adequate match, up to 20% price increase
+- poor: Weak match, >20% price increase
+- reject: Safety concern, dietary mismatch, or unacceptable price`,
+  input_schema: {
+    type: 'object',
+    properties: {
+      candidateName: {
+        type: 'string',
+        description: 'Name of the substitute candidate being evaluated',
+      },
+      recommendation: {
+        type: 'string',
+        enum: ['strongly_recommend', 'recommend', 'acceptable', 'poor', 'reject'],
+        description: 'Recommendation level for this substitute',
+      },
+      confidence: {
+        type: 'number',
+        description: 'Confidence in this recommendation (0-1)',
+      },
+      valueRating: {
+        type: 'string',
+        enum: ['excellent', 'good', 'acceptable', 'poor'],
+        description: 'Value-for-money rating',
+      },
+      reasoning: {
+        type: 'string',
+        description: 'Explanation of why this substitute is/isn\'t recommended',
+      },
+      pricePerUnitAssessment: {
+        type: 'string',
+        description: 'Assessment of price-per-unit compared to original',
+      },
+      storeBrandNote: {
+        type: 'string',
+        description: 'Note about store brand preference if applicable',
+      },
+      safetyFlags: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Any safety/dietary concerns to flag',
+      },
+    },
+    required: ['candidateName', 'recommendation', 'confidence', 'valueRating', 'reasoning'],
+  } satisfies ToolInputSchema,
+};
+
+/**
+ * Tool for generating Portuguese search queries for Auchan.pt.
+ */
+export const generateSearchQueriesToolDef: ToolDefinition = {
+  name: 'generate_search_queries',
+  description: `Generate Portuguese search queries for Auchan.pt grocery search.
+Extract key product terms, consider alternative names/brands, and generate
+multiple query options ordered by likelihood of success.
+
+Examples:
+- "Queijo Fresco Magro Auchan 200g" → ["queijo fresco", "queijo magro"]
+- "Leite Mimosa UHT Meio Gordo 1L" → ["leite meio gordo", "leite uht"]
+- "Iogurte Grego Natural 500g" → ["iogurte grego", "iogurte natural"]
+
+Rules:
+- Remove size/weight units
+- Extract core product type
+- Include category terms
+- Try brand alternatives if known
+- Portuguese terms only`,
+  input_schema: {
+    type: 'object',
+    properties: {
+      queries: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Search queries to try (best first, 2-4 queries)',
+      },
+      reasoning: {
+        type: 'string',
+        description: 'Brief explanation of query strategy',
+      },
+    },
+    required: ['queries', 'reasoning'],
+  } satisfies ToolInputSchema,
+};
+
 // =============================================================================
 // General Reasoning Tools
 // =============================================================================
@@ -318,6 +416,8 @@ export const stockPrunerTools: ToolDefinition[] = [
  * All tools available for Substitution analysis.
  */
 export const substitutionTools: ToolDefinition[] = [
+  makeSubstitutionDecisionTool,
+  generateSearchQueriesToolDef,
   compareProductsTool,
   rankSubstitutesTool,
   documentReasoningTool,
@@ -331,6 +431,8 @@ export const allTools: ToolDefinition[] = [
   analyzeCartItemTool,
   classifyProductCategoryTool,
   makePruneDecisionTool,
+  makeSubstitutionDecisionTool,
+  generateSearchQueriesToolDef,
   compareProductsTool,
   rankSubstitutesTool,
   documentReasoningTool,

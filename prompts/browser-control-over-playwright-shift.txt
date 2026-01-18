@@ -1,0 +1,94 @@
+OBJECTIVE
+Build an autonomous shopping agent for auchan.pt that prepares an ~80% correct cart
+using a real, long-lived browser session that both humans and Claude Code can
+interact with in real time.
+
+KEY ARCHITECTURAL SHIFT
+Do NOT use Playwright or Puppeteer as a closed test runner.
+Instead, treat the browser as a persistent, remote-controlled resource.
+
+HIGH-LEVEL APPROACH
+1. Launch a real Chrome instance with:
+   - Remote debugging enabled (CDP)
+   - Persistent user profile (session, cookies, login retained)
+   - Visible UI (not headless)
+
+2. Build a thin “Browser Control Server” that:
+   - Exposes HTTP or WebSocket endpoints
+   - Translates commands into CDP actions
+   - NEVER owns business logic or planning
+
+3. Claude Code interacts ONLY with the control server, not the browser directly.
+
+BROWSER CONTROL API (INITIAL)
+Implement minimal, deterministic endpoints:
+
+- GET /page/html
+- GET /page/screenshot
+- POST /navigate { url }
+- POST /click { selector | text | coordinates }
+- POST /evaluate { js }
+- GET /network/last-requests
+- GET /dom/query { text | role | attributes }
+
+These must be synchronous, observable, and replayable.
+
+BROWSER LIFECYCLE RULES
+- Browser is launched manually or by a bootstrap script
+- Browser NEVER auto-closes
+- Claude Code may attach/detach freely
+- Human may interact with browser at any time
+- Agent must tolerate manual interference
+
+AUTOMATION STRATEGY FOR AUCHAN.PT
+1. Prefer URL navigation wherever possible:
+   - Search via query parameters
+   - Orders via known account URLs
+2. Use DOM inspection only when URLs are insufficient
+3. Snapshot HTML and screenshots frequently
+4. Let Claude Code discover:
+   - “Load past order” URLs
+   - Order merge mechanics
+   - Cart mutation behavior
+   - Availability flags
+   - Substitution flows
+
+AGENT LOGIC (OUTSIDE BROWSER)
+Claude Code is responsible for:
+- Planning steps
+- Heuristic pruning decisions
+- Replacement selection
+- Retry logic
+- Failure analysis
+
+The browser server MUST remain dumb.
+
+OBSERVABILITY
+Implement two output streams:
+- agent.log → verbose, structured, machine-readable (for Claude Code)
+- user.log → concise, narrative, trust-building
+
+SAFETY GUARDRAILS
+- NEVER click “confirm order”
+- Require explicit human action for checkout
+- If ambiguous, stop and report state
+
+DEVELOPMENT MODE
+Initially:
+- No user UI
+- No extension
+- Claude Code drives everything
+- Human only logs in once and leaves browser running
+
+LATER (OPTIONAL)
+- Add a small UI panel that mirrors agent steps
+- Add chat interface for user instructions
+- Add replay / audit viewer
+
+SUCCESS CRITERIA
+- Claude Code can autonomously:
+  - Explore auchan.pt
+  - Load and merge last 3 orders
+  - Produce a cart diff
+  - Iterate without human relay
+- Browser remains usable and trustworthy for humans

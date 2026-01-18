@@ -1,0 +1,3 @@
+# Session logs folder
+# Individual session logs are stored here to prevent merge conflicts
+# Naming pattern: {DATE}-{BRANCH_SHORT}-{SESSION_ID}.md

@@ -184,6 +184,45 @@ Playwright-based browser automation tools:
 
 ---
 
+## Feature Backlog
+
+> Features specified via `/speckit-specify`, ready for implementation planning.
+
+| Feature | Points | Priority | Status | Spec | Plan | Tasks |
+|---------|--------|----------|--------|------|------|-------|
+| 001-extension-merge-orders | 15 | P1 | **Tasks Ready** | [spec.md](Specs/001-extension-merge-orders/spec.md) | [plan.md](Specs/001-extension-merge-orders/plan.md) | [tasks.md](Specs/001-extension-merge-orders/tasks.md) |
+
+### 001-extension-merge-orders: Extension Button - Merge Last 3 Orders
+
+**Description**: Add "Merge last 3 orders" button to Chrome extension popup that triggers CartBuilder workflow.
+
+**User Stories** (Revised Effort - 90% infrastructure exists):
+- US5: Auto-detect login state (P1) - 2 points
+- US1: Trigger order merge from extension popup (P1) - 4 points
+- US2: Visual progress feedback during merge (P1) - 3 points
+- US3: View merge results (P1) - 2 points
+- US4: Handle errors gracefully (P2) - 2 points
+- Integration Testing - 2 points
+
+**Dependencies**: Sprint-EXT-I-001 (Chrome extension infrastructure) - **90% complete**
+
+**Sprint Allocation**: Single sprint (15 points - revised down from 21)
+
+**Implementation Phases**:
+- Setup: manifest.json, esbuild config (2 tasks)
+- Foundation: Login detection, button state (2 tasks)
+- Core: Multi-order flow, progress, results (5 tasks)
+- Polish: Error handling, cancel, tests (3 tasks)
+
+**Next Steps**:
+1. ~~Run `/speckit-plan 001-extension-merge-orders`~~ ✓ Complete
+2. ~~Run `/speckit-tasks 001-extension-merge-orders`~~ ✓ Complete (12 tasks generated)
+3. Run `/sprint-new Extension I 002` to create Sprint-EXT-I-002
+4. Copy tasks to SPRINT-PLAN.md
+5. Run `/sprint-start` to begin implementation
+
+---
+
 ## Notes & Considerations
 
 ### Platform Constraints
@@ -198,4 +237,4 @@ Playwright-based browser automation tools:
 
 ---
 
-*Last Updated: 2026-01-10*
+*Last Updated: 2026-01-17*

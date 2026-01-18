@@ -3,8 +3,12 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'node',
-    include: ['tests/**/*.test.ts', 'src/**/__tests__/**/*.test.ts'],
+    environment: 'jsdom', // Changed from 'node' to 'jsdom' for DOM testing
+    include: [
+      'tests/**/*.test.ts',
+      'src/**/__tests__/**/*.test.ts',
+      'extension/**/__tests__/**/*.test.ts', // Added extension tests
+    ],
     exclude: ['tests/**/*.spec.ts'], // Playwright tests use .spec.ts
     coverage: {
       provider: 'v8',

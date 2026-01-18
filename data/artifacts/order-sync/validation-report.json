@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-01-13T00:53:05.430Z",
+  "inputFile": "C:\\Users\\rcoelho\\Desktop\\ai-shopping-copilot\\data\\memory\\household-demo\\purchase-history.json",
+  "summary": {
+    "totalRecords": 1637,
+    "uniqueRecords": 1637,
+    "duplicateCount": 0,
+    "uniqueOrders": 47,
+    "uniqueProducts": 414,
+    "status": "PASS"
+  },
+  "sortingValidation": {
+    "isSorted": true,
+    "firstOutOfOrderIndex": null,
+    "details": "All records properly sorted by date DESC, orderId DESC"
+  },
+  "dataIntegrity": {
+    "missingFields": [],
+    "allFieldsPresent": true
+  },
+  "duplicates": []
+}

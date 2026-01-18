@@ -163,6 +163,17 @@ export const RankedSlotSchema = z.object({
   reason: z.string(),
   /** Rank (1 = best) */
   rank: z.number().int().positive(),
+  // Convenience fields (flattened from slot for display)
+  /** Day name in Portuguese (e.g., "Quarta-feira") */
+  dayName: z.string().optional(),
+  /** Start time (HH:MM format) */
+  startTime: z.string().optional(),
+  /** End time (HH:MM format) */
+  endTime: z.string().optional(),
+  /** Delivery cost in euros */
+  price: z.number().optional(),
+  /** Date of delivery */
+  date: z.date().optional(),
 });
 
 export type RankedSlot = z.infer<typeof RankedSlotSchema>;

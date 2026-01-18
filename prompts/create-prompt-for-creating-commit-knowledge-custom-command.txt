@@ -1,0 +1,12 @@
+Imagine that, after completing a productive coding session, you notice that some of the understanding you just formed around the current topic or task at hand that was just solved during this session could be dangerous to forget in future sessions.
+
+This understanding could be a hard earned lesson or an achievement in overcoming an obstacle or simply a success in an of its own in the context of the solution of this software, but you want to crystallize it in documentation not as a retrospective insight or an historical context, because you're afraid it would soon become obsolete in a few sessions' work.
+You would want to document something that is closer to a rule which you would want to silently enforce on yourself from now on, without re-deriving it again.
+
+If you wanted to ensure that this kind of durable, normative understanding could be captured and enforced automatically in the future — in the same way you follow internal rules without questioning them — what would you prompt yourself with?
+
+Do not write the rule.
+Do not write the mechanism.
+Do not write the command.
+
+Only write the exact prompt you would ask yourself so that, when followed, it would reliably produce such a mechanism and nothing else.

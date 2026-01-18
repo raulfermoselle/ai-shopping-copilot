@@ -1,0 +1,24 @@
+{
+  "runId": "2026-01-13_00-23-41",
+  "timestamp": "2026-01-13T00:23:41.000Z",
+  "type": "order-sync",
+  "status": "initialized",
+  "config": {
+    "sourceFile": "data/memory/household-demo/purchase-history.json",
+    "snapshotFile": "purchase-history.snapshot.json"
+  },
+  "artifacts": {
+    "screenshots": "screenshots/",
+    "html": "html/",
+    "validations": "validations/"
+  },
+  "metrics": {
+    "startTime": "2026-01-13T00:23:41.000Z",
+    "endTime": null,
+    "duration": null,
+    "screenshotCount": 0,
+    "htmlSnapshotCount": 0,
+    "validationCount": 0
+  },
+  "notes": []
+}

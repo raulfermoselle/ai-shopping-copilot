@@ -103,6 +103,8 @@ export {
   rankSubstitutesTool,
   documentReasoningTool,
   flagForUserReviewTool,
+  makeSubstitutionDecisionTool,
+  generateSearchQueriesToolDef,
   // Tool collections
   stockPrunerTools,
   substitutionTools,
