@@ -134,7 +134,7 @@ This specification defines the **first minimal, end-to-end user story** that val
 | FR006 | Agent can query current cart contents | US1 | Agent can enumerate items in cart with quantities |
 | FR007 | Agent can verify authentication state | US1, US3 | Agent confirms user is logged in before proceeding (does not handle login) |
 | FR008 | Agent verifies state after actions and diagnoses failures intelligently | US3 | Agent inspects DOM/console to understand failures, decides next steps autonomously (not mechanical retries) |
-| FR009 | Agent can log all actions and observations for later review | US2, US3 | Complete audit trail exists |
+| FR009 | Agent captures state after each action via `capture_state` pattern (screenshot, DOM snapshot, URL, console, observations) | US2, US3 | Complete audit trail exists in `runs/` artifacts |
 | FR010 | Agent reports outcomes in natural language narrative | US1 | Agent explains what it did, what it observed, and its confidence (e.g., "I merged 3 orders. Cart has 47 items. 2 items were unavailable.") |
 
 ### Business Rules

@@ -38,11 +38,12 @@
 | Global | - | - | G-001, G-002 | Complete |
 | CartBuilder | CB-R-001 | CB-A-001 | CB-I-001 | Complete |
 | Coordinator | - | CO-A-001 | CO-I-001 | Complete |
+| BrowserMCP | - | - | BrowserMCP-I-001 (ACTIVE) | Implementation In Progress |
 | Substitution | SU-R-001 | - | - | Research Complete |
 | SlotScout | SS-R-001 (60%) | - | - | Blocked |
 | StockPruner | - | - | - | Not Started |
 | ControlPanel | - | - | - | Unblocked |
-| Extension | EXT-R-001 | EXT-A-001 | EXT-P-001, EXT-I-001, EXT-I-002 (Abandoned) | Architecture Pivot - browserMCP Next |
+| Extension | EXT-R-001 | EXT-A-001 | EXT-P-001, EXT-I-001, EXT-I-002 (Abandoned) | Architecture Pivot - browserMCP Bridge |
 
 ---
 
@@ -52,6 +53,7 @@
 
 | Branch | Sprint | Status | Started | Last Activity |
 |--------|--------|--------|---------|---------------|
+| feature/002-browsermcp-cart-merge | BrowserMCP-I-001 | ACTIVE | 2026-01-18 | 2026-01-18 |
 | feat/chrome-extension | Sprint-EXT-I-002 | Abandoned (Pivot to browserMCP) | 2026-01-17 | 2026-01-18 |
 | main | None | Idle | - | 2026-01-16 |
 
@@ -73,15 +75,17 @@
 
 ## Sprint Queue (Prioritized)
 
-### Priority 1 (Active/Ready to Start)
+### Priority 1 (Currently Active)
+- **BrowserMCP-I-001**: Cart Merge - Agentic Baseline (11 of 15 tasks pending, Phase 0 complete)
+
+### Priority 2 (Ready to Start)
 - **Sprint-SU-A-001**: Substitution Architecture (research complete, ready to start)
 - **Sprint-CP-I-001**: Control Panel Implementation (unblocked by CO-I-001)
 
-### Priority 2 (Blocked)
+### Priority 3 (Blocked)
 - **Sprint-SS-R-001**: SlotScout Research (60% complete, awaiting user manual research)
 
 ### Backlog
-- Sprint-SU-A-001: Substitution Architecture (research complete, ready to start)
 - Sprint-SU-I-001: Substitution Implementation (needs SU-A-001)
 - Sprint-SS-A-001: SlotScout Architecture (needs SS-R-001)
 - Sprint-SS-I-001: SlotScout Implementation (needs SS-A-001)
@@ -161,7 +165,7 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
 ## Notes for Current Session
 
 - **Phase 1 Foundation Complete** - All 7 foundation sprints finished
-- **Phase 2 In Progress** - Architecture pivot for Extension module
+- **Phase 2 In Progress** - Architecture pivot for Extension module, BrowserMCP-I-001 now active
 - **Architecture Pivot Decision (2026-01-18)**:
   - **Sprint-EXT-I-002 Abandoned**: Chrome extension-only approach proven unworkable
   - Content scripts lose state across page reloads during automation
@@ -169,12 +173,19 @@ See [EXCEPTIONS-LOG.md](./Logs/EXCEPTIONS-LOG.md) for details.
   - Solution: Transition to browserMCP bridge architecture
   - Extension becomes thin UI client, MCP server handles automation
   - Reuses popup UI, manifest, esbuild config from abandoned sprint
-- **Currently Ready (Priority 1)**:
-  - Extension next steps: TBD (browserMCP bridge approach under specification)
-  - **Sprint-SU-A-001** - Substitution Architecture (ready to start)
+- **Sprint Creation (2026-01-18)**:
+  - **BrowserMCP-I-001 CREATED AND ACTIVE** - Cart Merge implementation
+  - 15 tasks (T001-T015), 21 story points
+  - Phase 0 (Setup) completed pre-sprint: T001-T003 done
+  - T004 (Tool discovery) completed: 12 tools available
+  - Remaining: 11 tasks (T005-T015), 17 points across Harness/Workflow/Guardrails phases
+  - Sequential execution required (tight dependencies)
+- **Next Task**: T005 (capture_state pattern implementation)
+- **Other Ready Sprints**:
+  - **Sprint-SU-A-001** - Substitution Architecture (ready to start after BrowserMCP advances)
   - **Sprint-CP-I-001** - Control Panel Implementation (ready to start)
 - **Blocked**: SS-R-001 needs user to manually research delivery slot page
 
 ---
 
-*Last Updated: 2026-01-18 (Sprint-EXT-I-002 Abandoned, Pivoting to browserMCP)*
+*Last Updated: 2026-01-18 (BrowserMCP-I-001 Created and Active, Sprint-EXT-I-002 Abandoned)*

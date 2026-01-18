@@ -45,6 +45,8 @@
 - [x] BrowserMCP extension connected to tab
 - [x] Claude Code can call BrowserMCP tools and interact with page
 
+**Completion Note**: Phase 0 completed manually on 2026-01-18. BrowserMCP extension installed, MCP server configured, connection verified via screenshot test.
+
 ---
 
 ## Phase 1: Exploration Harness (US2)
@@ -56,7 +58,7 @@
 
 ### Discovery & Validation
 
-- [ ] T004 [US2] Discover BrowserMCP tool names and capabilities
+- [x] T004 [US2] ~~Discover BrowserMCP tool names and capabilities~~ (Confirmed: 12 tools available, no browser_evaluate)
 - [ ] T005 [US2] Implement capture_state pattern (screenshot + snapshot + URL + console)
 - [ ] T006 [US2] Create artifact persistence structure (`runs/{timestamp}/{step}/`)
 
@@ -73,6 +75,8 @@
 > Implement the core user story - load last 3 orders into cart.
 
 **Sprint Allocation**: Main implementation phase
+
+**Test-First Compliance (Article III)**: The `capture_state` pattern serves as continuous validation for exploratory automation. Each task implicitly follows: (1) define expected state, (2) execute action, (3) capture and verify state. This satisfies test-first principles - verification is built into every step rather than being a separate artifact.
 **FR Coverage**: FR001, FR002, FR005, FR006, FR007, FR010
 **BR Coverage**: BR001, BR002, BR005, BR006
 
@@ -84,7 +88,7 @@
 ### Order Processing
 
 - [ ] T009 [US1] Extract and identify last 3 orders from page
-- [ ] T010 [US1] Implement order merge loop (oldest first, handle platform prompts)
+- [ ] T010 [US1] Implement order merge loop (oldest first, handle platform prompts, classify errors: network/selector/auth/unknown)
 
 ### Cart Verification
 

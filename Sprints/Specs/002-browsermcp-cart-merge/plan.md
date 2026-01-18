@@ -67,21 +67,23 @@
 | Chrome | Real browser session | User's logged-in profile |
 | MCP Client | Claude Code MCP integration | Configured in Claude settings |
 
-### BrowserMCP Capabilities (Assumed)
-
-Based on typical BrowserMCP functionality:
+### BrowserMCP Capabilities (Confirmed)
 
 | Capability | MCP Tool | Purpose |
 |------------|----------|---------|
 | Navigate | `browser_navigate` | Go to URL |
+| Back/Forward | `browser_go_back`, `browser_go_forward` | History navigation |
 | Screenshot | `browser_screenshot` | Capture current page |
-| Click | `browser_click` | Click element by selector/text |
+| DOM Snapshot | `browser_snapshot` | Get accessibility tree / page structure |
+| Click | `browser_click` | Click element by ref |
+| Hover | `browser_hover` | Hover over element |
 | Type | `browser_type` | Enter text into field |
-| DOM Snapshot | `browser_snapshot` | Get page structure |
-| Evaluate | `browser_evaluate` | Run JS in page context |
-| Console | `browser_console` | Get console logs |
+| Select | `browser_select_option` | Select dropdown option |
+| Key Press | `browser_press_key` | Press keyboard key |
+| Wait | `browser_wait` | Wait for specified time |
+| Console | `browser_get_console_logs` | Get console logs |
 
-**Note**: Exact tool names may vary. Claude Code will discover actual capabilities on first connection.
+**Note**: No `browser_evaluate` for arbitrary JS execution. DOM inspection relies on `browser_snapshot` accessibility tree.
 
 ---
 
