@@ -1,0 +1,351 @@
+# API Contracts: {FEATURE_NAME}
+# Date: {DATE}
+# Specification: {SPEC_PATH}
+# Version: 1.0
+
+# This file defines the API contracts for the feature using OpenAPI-inspired structure
+# For internal APIs (not REST), adapt the structure to match your RPC/message passing patterns
+
+info:
+  title: "{Feature Name} API"
+  version: "1.0.0"
+  description: |
+    {Brief description of the API's purpose}
+  contact:
+    name: "{Team/Developer Name}"
+
+# Authentication & Authorization
+security:
+  - type: "{bearer_token / api_key / session / none}"
+    description: "{How authentication works}"
+  - permissions:
+      - "{permission1}": "{What this allows}"
+      - "{permission2}": "{What this allows}"
+
+# Rate Limiting
+rate_limits:
+  default: "{100 requests per minute}"
+  authenticated: "{1000 requests per minute}"
+  burst: "{10 requests per second}"
+
+# API Versioning Strategy
+versioning:
+  strategy: "{URL path / Header / Query param}"
+  current: "v1"
+  deprecation_policy: "{How old versions are sunset}"
+
+# Endpoints / Operations
+endpoints:
+
+  # Template for each endpoint - duplicate this block for each API operation
+  - name: "{Endpoint Name}"
+    path: "{METHOD} {/path/to/resource}"
+    description: |
+      {Detailed description of what this endpoint does}
+      {Use cases and when to call it}
+
+    # Path Parameters
+    path_parameters:
+      - name: "{paramName}"
+        type: "{string / number / uuid}"
+        required: true
+        description: "{What this parameter represents}"
+        example: "{example-value}"
+        validation:
+          - "{constraint 1}"
+          - "{constraint 2}"
+
+    # Query Parameters
+    query_parameters:
+      - name: "{queryParam}"
+        type: "{string / number / boolean / array}"
+        required: false
+        default: "{default value}"
+        description: "{What this parameter does}"
+        example: "{example-value}"
+        validation:
+          - "{constraint 1}"
+
+    # Request Headers
+    headers:
+      required:
+        - name: "Authorization"
+          description: "Bearer token for authentication"
+          example: "Bearer eyJhbGc..."
+        - name: "{Header-Name}"
+          description: "{Purpose}"
+          example: "{example-value}"
+      optional:
+        - name: "{Optional-Header}"
+          description: "{Purpose}"
+          example: "{example-value}"
+
+    # Request Body
+    request_body:
+      content_type: "application/json"
+      required: true
+      schema:
+        type: "object"
+        properties:
+          "{fieldName}":
+            type: "{string / number / object / array}"
+            required: true
+            description: "{Purpose of field}"
+            example: "{example-value}"
+            validation:
+              - "{constraint 1}"
+              - "{constraint 2}"
+          "{nestedObject}":
+            type: "object"
+            properties:
+              "{nestedField}":
+                type: "{type}"
+                required: false
+                description: "{Purpose}"
+
+      example: |
+        {
+          "{fieldName}": "{example-value}",
+          "{nestedObject}": {
+            "{nestedField}": "{example-value}"
+          }
+        }
+
+    # Response - Success
+    response_success:
+      status: 200
+      description: "{What success means}"
+      content_type: "application/json"
+      schema:
+        type: "object"
+        properties:
+          "{responseField}":
+            type: "{type}"
+            description: "{Purpose}"
+          "meta":
+            type: "object"
+            description: "Metadata about the response"
+            properties:
+              "timestamp":
+                type: "string"
+                format: "ISO 8601"
+              "requestId":
+                type: "string"
+                format: "uuid"
+
+      example: |
+        {
+          "{responseField}": "{example-value}",
+          "meta": {
+            "timestamp": "2025-01-19T10:00:00Z",
+            "requestId": "uuid-here"
+          }
+        }
+
+    # Response - Errors
+    response_errors:
+      - status: 400
+        code: "BAD_REQUEST"
+        description: "Invalid request parameters"
+        schema:
+          type: "object"
+          properties:
+            error:
+              type: "object"
+              properties:
+                code:
+                  type: "string"
+                  example: "BAD_REQUEST"
+                message:
+                  type: "string"
+                  example: "Validation failed"
+                details:
+                  type: "array"
+                  items:
+                    type: "object"
+                    properties:
+                      field:
+                        type: "string"
+                      issue:
+                        type: "string"
+        example: |
+          {
+            "error": {
+              "code": "BAD_REQUEST",
+              "message": "Validation failed",
+              "details": [
+                {"field": "{fieldName}", "issue": "{what's wrong}"}
+              ]
+            }
+          }
+
+      - status: 401
+        code: "UNAUTHORIZED"
+        description: "Missing or invalid authentication"
+        example: |
+          {
+            "error": {
+              "code": "UNAUTHORIZED",
+              "message": "Authentication required"
+            }
+          }
+
+      - status: 403
+        code: "FORBIDDEN"
+        description: "Insufficient permissions"
+        example: |
+          {
+            "error": {
+              "code": "FORBIDDEN",
+              "message": "You don't have permission to access this resource"
+            }
+          }
+
+      - status: 404
+        code: "NOT_FOUND"
+        description: "Resource not found"
+        example: |
+          {
+            "error": {
+              "code": "NOT_FOUND",
+              "message": "{Resource} not found"
+            }
+          }
+
+      - status: 409
+        code: "CONFLICT"
+        description: "Resource conflict (e.g., duplicate)"
+        example: |
+          {
+            "error": {
+              "code": "CONFLICT",
+              "message": "Resource already exists"
+            }
+          }
+
+      - status: 422
+        code: "UNPROCESSABLE_ENTITY"
+        description: "Semantic validation failed"
+        example: |
+          {
+            "error": {
+              "code": "UNPROCESSABLE_ENTITY",
+              "message": "{Business rule violation description}"
+            }
+          }
+
+      - status: 500
+        code: "INTERNAL_SERVER_ERROR"
+        description: "Unexpected server error"
+        example: |
+          {
+            "error": {
+              "code": "INTERNAL_SERVER_ERROR",
+              "message": "An unexpected error occurred",
+              "requestId": "uuid-for-support"
+            }
+          }
+
+    # Side Effects
+    side_effects:
+      - "{Side effect 1: e.g., Sends notification email}"
+      - "{Side effect 2: e.g., Updates cache}"
+      - "{Side effect 3: e.g., Triggers webhook}"
+
+    # Idempotency
+    idempotency:
+      safe: "{true/false - does it modify state?}"
+      idempotent: "{true/false - same request twice = same result?}"
+      idempotency_key: "{Optional: header name for idempotency key}"
+
+    # Performance
+    performance:
+      average_latency: "{milliseconds}"
+      p95_latency: "{milliseconds}"
+      p99_latency: "{milliseconds}"
+      timeout: "{seconds}"
+
+    # Related Endpoints
+    related:
+      - "{Related endpoint 1}"
+      - "{Related endpoint 2}"
+
+# Webhooks (if applicable)
+webhooks:
+  - name: "{Webhook Name}"
+    event: "{event.triggered}"
+    description: "{What triggers this webhook}"
+    payload:
+      type: "object"
+      properties:
+        "{field}":
+          type: "{type}"
+          description: "{Purpose}"
+    example: |
+      {
+        "{field}": "{example-value}"
+      }
+
+# Event Streams (if applicable)
+events:
+  - name: "{Event Name}"
+    topic: "{event/topic/name}"
+    description: "{What this event represents}"
+    payload_schema:
+      type: "object"
+      properties:
+        "eventId":
+          type: "string"
+          format: "uuid"
+        "timestamp":
+          type: "string"
+          format: "ISO 8601"
+        "eventType":
+          type: "string"
+          example: "{event.type}"
+        "data":
+          type: "object"
+          properties:
+            "{field}":
+              type: "{type}"
+
+    example: |
+      {
+        "eventId": "uuid-here",
+        "timestamp": "2025-01-19T10:00:00Z",
+        "eventType": "{event.type}",
+        "data": {
+          "{field}": "{example-value}"
+        }
+      }
+
+# Data Models Reference
+data_models:
+  - name: "{EntityName}"
+    location: "{Path to data-model.md or types.ts}"
+    description: "{Brief description}"
+
+# Testing Contracts
+testing:
+  mock_data:
+    location: "{Path to test fixtures}"
+    description: "{How to use mock data}"
+
+  test_scenarios:
+    - name: "{Scenario 1}"
+      description: "{What to test}"
+      setup: "{Prerequisites}"
+      actions: "{Steps to execute}"
+      assertions: "{Expected outcomes}"
+
+# Change Log
+changelog:
+  - version: "1.0.0"
+    date: "{DATE}"
+    changes:
+      - "Initial contract definition"
+
+# Notes
+notes: |
+  {Any additional context, gotchas, or important considerations}
+  {Known limitations or future enhancements}

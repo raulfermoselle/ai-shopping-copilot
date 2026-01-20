@@ -19,6 +19,11 @@ If no feature-id provided, uses most recent specification.
 - Specification exists: `Sprints/Specs/{feature-id}/spec.md`
 - Requirements checklist reviewed
 - No unresolved `[NEEDS CLARIFICATION]` markers
+- Templates available in `.claude/templates/`:
+  - `plan-template.md`
+  - `research-template.md`
+  - `data-model-template.md`
+  - `contracts-template.yaml`
 
 ## Execution Steps
 
@@ -35,42 +40,143 @@ if "[NEEDS CLARIFICATION]" in spec:
 
 ### 2. Phase 0: Research
 
-Identify technical unknowns:
-- API integrations needed
-- Library selection
-- Performance requirements
-- Security considerations
+**Goal**: Resolve all technical unknowns before design begins.
 
-Create `Sprints/Specs/{feature_id}/research.md`
+**Step-by-step execution**:
+
+1. **Extract NEEDS CLARIFICATION items from spec**
+   - Search spec for `[NEEDS CLARIFICATION]` markers
+   - List all technical unknowns from User Scenarios and Functional Requirements
+   - Prioritize by impact: architectural > feature > UI
+
+2. **For each clarification/unknown**:
+   - **Investigate**: Search codebase, read documentation, check existing patterns
+   - **Research approach**: Document how you investigated (files examined, documentation consulted)
+   - **Decision**: Choose an approach based on findings
+   - **Rationale**: Explain why this choice aligns with project architecture
+   - **Alternatives**: List other options considered and why they were rejected
+   - **References**: Link to documentation, ADRs, or codebase files examined
+
+3. **Create research.md**
+   - Use template: `.claude/templates/research-template.md`
+   - Location: `Sprints/Specs/{feature_id}/research.md`
+   - Fill all sections with investigation findings
+   - Include summary table of key technical decisions
+
+4. **Key areas to research**:
+   - API integrations needed (existing endpoints vs. new)
+   - Library selection (use existing vs. add new dependency)
+   - Performance requirements (latency targets, throughput)
+   - Security considerations (auth, validation, encryption)
+   - Data storage strategy (database, file system, memory)
+   - Error handling patterns (follow existing conventions)
+
+**Gate**: Must resolve ALL clarifications before proceeding to design.
 
 ### 3. Phase 1: Design
 
-Generate design artifacts:
+**Goal**: Create detailed design artifacts ready for implementation.
 
-**data-model.md**:
+#### Step 1a: Data Modeling
+
+1. **Extract entities from spec**
+   - Review User Scenarios for nouns (entities)
+   - Review Functional Requirements for data structures
+   - Identify relationships between entities
+
+2. **For each entity, define**:
+   - **Fields**: Name, type, required/optional, validation rules
+   - **Relationships**: One-to-many, many-to-many, one-to-one
+   - **State transitions**: For stateful entities (e.g., Order: draft → pending → active)
+   - **Business rules**: Validation constraints, computed fields, invariants
+
+3. **Document storage strategy**:
+   - Database vs. file system vs. memory
+   - Indexes for query optimization
+   - Migration strategy if changing existing schema
+
+4. **Create data-model.md**:
+   - Use template: `.claude/templates/data-model-template.md`
+   - Location: `Sprints/Specs/{feature_id}/data-model.md`
+   - Include TypeScript types and Zod schemas
+   - Document all entities with complete field definitions
+
+**Example structure**:
 ```markdown
 ## Entity: User
-| Field | Type | Constraints |
-|-------|------|-------------|
-| id | UUID | PK |
-| email | String | Unique, Not Null |
-| password_hash | String | Not Null |
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| id | UUID | Yes | Valid UUID v4 | Unique identifier |
+| email | String | Yes | Valid email format, Unique | User email |
+| password_hash | String | Yes | Min 60 chars (bcrypt) | Password hash |
+| createdAt | Date | Yes | ISO 8601 | Creation timestamp |
 ```
 
-**contracts/api.yaml**:
+#### Step 1b: Contract Generation
+
+1. **Map user actions to endpoints**:
+   - Each user action from spec → API endpoint or internal function
+   - Use REST patterns where applicable: GET/POST/PUT/DELETE
+   - For internal APIs, define function signatures
+
+2. **For each endpoint, define**:
+   - **Path and method**: `POST /api/auth/register`
+   - **Request schema**: Parameters, body, headers
+   - **Response schema**: Success response structure
+   - **Error cases**: All possible error responses with codes
+   - **Authentication**: Required permissions or tokens
+   - **Side effects**: What else happens (emails, webhooks, cache updates)
+
+3. **Create contracts/api.yaml**:
+   - Use template: `.claude/templates/contracts-template.yaml`
+   - Location: `Sprints/Specs/{feature_id}/contracts/api.yaml`
+   - Include all endpoints with complete schemas
+   - Document error handling and rate limiting
+
+**Example structure**:
 ```yaml
-paths:
-  /api/auth/register:
-    post:
-      summary: Register new user
-      requestBody: ...
-      responses: ...
+endpoints:
+  - name: "Register User"
+    path: "POST /api/auth/register"
+    request_body:
+      schema:
+        type: object
+        properties:
+          email: {type: string, format: email}
+          password: {type: string, minLength: 8}
+    response_success:
+      status: 201
+      schema:
+        properties:
+          userId: {type: string, format: uuid}
+          token: {type: string}
+    response_errors:
+      - status: 400
+        code: "VALIDATION_ERROR"
+      - status: 409
+        code: "EMAIL_EXISTS"
 ```
 
-**quickstart.md**:
-- Implementation guide
-- Key decisions
-- Getting started steps
+#### Step 1c: Quickstart Guide
+
+1. **Create quickstart.md**:
+   - Location: `Sprints/Specs/{feature_id}/quickstart.md`
+   - Reference research.md for key technical decisions
+   - Reference data-model.md for entity overview
+   - Reference contracts/api.yaml for API endpoints
+
+2. **Include in quickstart**:
+   - **Prerequisites**: What developers need installed
+   - **Setup steps**: Clone, install, configure
+   - **Key files to read**: Entry points, core modules
+   - **Running locally**: Development commands
+   - **Running tests**: Test commands
+   - **Architecture overview**: High-level component diagram
+
+3. **Link to other artifacts**:
+   - "See research.md for technical decisions"
+   - "See data-model.md for entity definitions"
+   - "See contracts/api.yaml for API contracts"
 
 ### 4. Constitution Check
 
@@ -87,17 +193,63 @@ Validate against `memory/constitution.md`:
 
 ### 5. Generate Plan
 
-Read template: `templates/speckit/plan-template.md`
+**Use template**: `.claude/templates/plan-template.md`
 
-Write to: `Sprints/Specs/{feature_id}/plan.md`
+**Write to**: `Sprints/Specs/{feature_id}/plan.md`
 
-Contents:
-- Technical context (stack, dependencies)
-- Project structure
-- Data model summary
-- API contracts summary
-- Sprint mapping
-- Risk assessment
+**Fill template sections**:
+1. **Summary**: 1-2 paragraph feature overview
+2. **Technical Context**: All 9 specifications (Language, Dependencies, Storage, Testing, Platform, Type, Performance, Constraints, Scale)
+3. **Constitution Check**: Verify compliance with all relevant articles
+4. **Project Structure**: Directory tree showing new files
+5. **Research Outcomes**: Reference research.md, summarize key decisions
+6. **Data Model**: Reference data-model.md, list entities
+7. **API Contracts**: Reference contracts/api.yaml, list endpoints
+8. **Complexity Tracking**: Rate each component Low/Medium/High, calculate story points
+9. **Sprint Mapping**: (Filled by next step - leave as placeholder)
+10. **Quickstart**: Copy from quickstart.md
+11. **Risks & Mitigations**: Identify potential blockers
+12. **Success Criteria**: Copy from spec.md
+
+**Template placeholders to replace**:
+- `{FEATURE_NAME}` → Feature ID and title
+- `{BRANCH_NAME}` → Git branch name
+- `{DATE}` → Current date
+- `{SPEC_PATH}` → Path to spec.md
+- All other `{PLACEHOLDER}` values with actual content
+
+### 5.5. Templates Guide
+
+**Template locations**:
+- Plan: `.claude/templates/plan-template.md`
+- Research: `.claude/templates/research-template.md`
+- Data Model: `.claude/templates/data-model-template.md`
+- Contracts: `.claude/templates/contracts-template.yaml`
+
+**How to use templates**:
+
+1. **Read template file** to understand structure
+2. **Copy template content** to target location
+3. **Replace all `{PLACEHOLDER}` values** with actual content
+4. **Fill in all sections** - no sections should remain with placeholder text
+5. **Customize where needed** - templates are starting points, adapt to feature needs
+6. **Validate completeness** - ensure no `{PLACEHOLDER}` markers remain
+
+**When to customize vs. use as-is**:
+- **Use as-is**: Standard structure works for most features
+- **Customize**: Feature has unique requirements (e.g., special state machine, complex relationships)
+- **Add sections**: If template missing something important for this feature
+- **Remove sections**: If section truly not applicable (rare - usually better to write "N/A")
+
+**Template section mapping**:
+
+| Artifact | Template | Output Location |
+|----------|----------|-----------------|
+| Implementation Plan | `plan-template.md` | `Sprints/Specs/{id}/plan.md` |
+| Research | `research-template.md` | `Sprints/Specs/{id}/research.md` |
+| Data Model | `data-model-template.md` | `Sprints/Specs/{id}/data-model.md` |
+| API Contracts | `contracts-template.yaml` | `Sprints/Specs/{id}/contracts/api.yaml` |
+| Quickstart | (Custom - no template) | `Sprints/Specs/{id}/quickstart.md` |
 
 ### 6. Sprint Mapping
 

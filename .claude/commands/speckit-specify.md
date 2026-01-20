@@ -47,6 +47,30 @@ Parse feature description to extract:
 
 Write to: `Sprints/Specs/{feature_id}/spec.md`
 
+**Clarification Limits**:
+- Maximum 3 `[NEEDS CLARIFICATION]` markers allowed in spec
+- Prioritize by impact scope:
+  1. **Architectural** (affects multiple components)
+  2. **Feature** (affects core functionality)
+  3. **UI/UX** (affects presentation only)
+- For lower-priority uncertainties: Make informed guess, document assumption
+- Mark only true unknowns that block implementation planning
+
+**Success Criteria Requirements**:
+Each success criterion must be:
+- **Measurable**: Include specific numbers or verifiable outcomes
+  - ✅ "User can register in < 3 seconds"
+  - ❌ "User registration is fast"
+- **Technology-agnostic**: No framework or API specifics
+  - ✅ "System sends confirmation email within 1 minute"
+  - ❌ "SendGrid delivers confirmation email"
+- **User-focused**: Describes user-observable behavior
+  - ✅ "User sees error message if email already exists"
+  - ❌ "Database unique constraint enforced on email column"
+- **Verifiable without implementation**: Can be tested independently
+  - ✅ "User can reset password via email link"
+  - ❌ "JWT token expires after 24 hours" (implementation detail)
+
 ### 4. Sprint Integration
 
 Calculate story points and recommend sprint allocation:
@@ -70,6 +94,34 @@ Update `Sprints/SPRINT-PLANNING.md`:
 ### 5. Generate Requirements Checklist
 
 Create `Sprints/Specs/{feature_id}/checklists/requirements.md` from `templates/speckit/checklist-template.md`
+
+### 5.5. Re-Validation Cycle (If Clarifications Provided)
+
+**Trigger**: User provides responses to `[NEEDS CLARIFICATION]` items via `/speckit-clarify`
+
+**Process**:
+
+1. **Update spec.md** with clarification responses
+   - Replace `[NEEDS CLARIFICATION: question]` with actual decision
+   - Add rationale to relevant sections
+   - Update affected User Stories or Functional Requirements
+
+2. **Re-validate against requirements checklist**
+   - Read `checklists/requirements.md`
+   - Verify all checklist items still pass with new information
+   - Update checklist if clarifications revealed new requirements
+
+3. **Check for new clarifications**
+   - Scan updated spec for any new unknowns
+   - If new `[NEEDS CLARIFICATION]` items emerge: Document and prioritize
+   - If no new unknowns: Mark spec as "Ready for Planning"
+
+4. **Iteration limit**
+   - Maximum 3 clarification cycles allowed
+   - After 3 cycles: Make best-effort decisions, document assumptions
+   - Principle: Better to proceed with documented assumptions than infinite loops
+
+**Gate**: Spec must pass checklist validation before proceeding to `/speckit-plan`
 
 ### 6. Report
 

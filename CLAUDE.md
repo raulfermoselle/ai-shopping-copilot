@@ -382,6 +382,83 @@ This project uses **Sprint Management Framework v2.1.0** with multi-module mode.
 
 ---
 
+## Speckit Templates
+
+The project uses standardized templates for feature development artifacts, restored from GitHub's Spec-Kit framework and integrated with Sprint Management.
+
+### Available Templates
+
+| Template | Purpose | Command | Output |
+|----------|---------|---------|--------|
+| `plan-template.md` | Implementation plan | `/speckit-plan` | `Sprints/Specs/{id}/plan.md` |
+| `research-template.md` | Technical decisions | `/speckit-plan` | `Sprints/Specs/{id}/research.md` |
+| `data-model-template.md` | Entity definitions | `/speckit-plan` | `Sprints/Specs/{id}/data-model.md` |
+| `contracts-template.yaml` | API contracts | `/speckit-plan` | `Sprints/Specs/{id}/contracts/api.yaml` |
+
+**Location**: `.claude/templates/`
+
+### When to Use Templates
+
+**During planning phase** (`/speckit-plan`):
+1. **Research**: Document technical unknowns, alternatives considered, decisions made
+2. **Data Model**: Define entities, relationships, state transitions, business rules
+3. **Contracts**: Specify API endpoints, request/response schemas, error handling
+4. **Plan**: Create complete implementation plan with all 9 technical specifications
+
+### Template Structure
+
+Templates use `{PLACEHOLDER}` format for values to be filled:
+- `{FEATURE_NAME}` → Feature ID and title
+- `{BRANCH_NAME}` → Git branch name
+- `{DATE}` → Current date
+- `{SPEC_PATH}` → Path to specification
+
+**Agent responsibilities**:
+1. Read template to understand structure
+2. Copy template to target location
+3. Replace ALL placeholders with actual content
+4. Fill every section (use "N/A" if not applicable)
+5. Validate no `{PLACEHOLDER}` markers remain
+
+### Key Enhancements from Original Spec-Kit
+
+**Research phase** (Phase 0 in `/speckit-plan`):
+- Extract `[NEEDS CLARIFICATION]` items from spec
+- Investigate each unknown systematically
+- Document decision, rationale, alternatives considered
+- Reference sources (documentation, codebase files)
+
+**Design phase** (Phase 1 in `/speckit-plan`):
+- **Data Modeling**: Extract entities, define fields/relationships, document state transitions
+- **Contract Generation**: Map user actions to endpoints, define schemas, document errors
+- **Quickstart**: Create developer setup guide with architecture overview
+
+**Task generation** (`/speckit-tasks`):
+- **Detailed task format**: `- [ ] [TaskID] [P] [Story] Description | file/path`
+- **Phase structure**: Setup → Foundation → User Stories (priority order) → Polish
+- **MVP identification**: Suggest User Story 1 as minimum viable product
+- **Dependency graph**: Visualize task dependencies and parallelization opportunities
+
+**Quality gates** (`/speckit-specify`):
+- **Max 3 clarifications**: Prioritize by impact (architectural > feature > UI)
+- **Success criteria requirements**: Must be measurable, technology-agnostic, user-focused
+- **Re-validation cycle**: Max 3 iterations after clarifications provided
+
+### Integration with Sprint Management
+
+Templates include Sprint Management-specific elements:
+- **Constitution Check**: Validates compliance with project constitution
+- **Sprint Mapping**: Allocates tasks across sprints based on story points
+- **Task Traceability**: Links tasks to speckit (`Source: speckit:T###`)
+- **Test-First Ordering**: Ensures tests before implementation (Article III)
+- **AI Discoverability**: Conditional sections when enabled
+
+### Documentation
+
+Full template usage guide: `.claude/templates/README.md`
+
+---
+
 ## Subagent Usage (IMPORTANT)
 
 **Always use specialized subagents** to accelerate work and reduce context usage. Launch them in parallel when tasks are independent.

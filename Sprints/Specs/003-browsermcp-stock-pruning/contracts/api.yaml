@@ -1,0 +1,856 @@
+# API Contracts: BrowserMCP Stock Pruning Feature
+# ============================================================================
+# Function/Tool Interface Specifications
+#
+# This document defines the function contracts (signatures, parameters,
+# returns, errors, side effects) for the Stock Pruning feature.
+#
+# Note: This is NOT a REST API. These are TypeScript function/tool interfaces
+# that the Stock Pruner agent orchestrates during a pruning session.
+#
+# Date: 2026-01-19
+# Specification: Sprints/Specs/003-browsermcp-stock-pruning/spec.md
+# Data Model: Sprints/Specs/003-browsermcp-stock-pruning/data-model.md
+
+---
+
+## 1. syncPurchaseHistory()
+
+**Purpose**: Extract new orders from Auchan.pt order history and merge into purchase-history.json
+
+**Category**: Extraction Tool (BrowserMCP + File I/O)
+
+### Signature
+
+```typescript
+async function syncPurchaseHistory(
+  page: Page,
+  lastSyncDate?: Date,
+  options?: SyncOptions
+): Promise<SyncPurchaseHistoryResult>
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `page` | `Page` (Playwright) | Yes | Active browser page with Auchan.pt loaded and authenticated |
+| `lastSyncDate` | `Date` | No | Only extract orders newer than this date. Defaults to `null` (full history). If `null`, extracts all available orders. |
+| `options` | `SyncOptions` | No | Configuration for sync behavior (see below) |
+
+### SyncOptions
+
+```typescript
+interface SyncOptions {
+  // Max number of orders to extract per sync (default: 50)
+  // Useful for incremental syncing of large histories
+  maxOrders?: number;
+
+  // Whether to create backup of existing purchase-history.json (default: true)
+  // Backup saved as purchase-history.{timestamp}.backup.json
+  createBackup?: boolean;
+
+  // Retry failed extraction N times before giving up (default: 3)
+  maxRetries?: number;
+
+  // Timeout per order page load in milliseconds (default: 10000)
+  pageLoadTimeout?: number;
+}
+```
+
+### Return Type
+
+```typescript
+interface SyncPurchaseHistoryResult {
+  // Whether sync completed successfully
+  success: boolean;
+
+  // Number of new orders extracted from Auchan.pt
+  newOrdersFound: number;
+
+  // Total number of products extracted
+  newRecordsAdded: number;
+
+  // Date range of extracted orders
+  dateRange?: {
+    oldest: Date;
+    newest: Date;
+  };
+
+  // Updated sync status metadata
+  syncStatus: PurchaseHistorySyncStatus;
+
+  // New records added (for logging/validation)
+  newRecords: PurchaseRecord[];
+
+  // Warnings during extraction (e.g., parsing failures)
+  warnings: string[];
+
+  // Error details if sync failed
+  error?: Error;
+}
+```
+
+### PurchaseHistorySyncStatus Reference
+
+```typescript
+interface PurchaseHistorySyncStatus {
+  lastSyncTimestamp: Date;      // When this sync completed
+  ordersCaptured: number;        // Total unique orders in history file
+  recordCount: number;           // Total product records across all orders
+  lastOrderDate?: Date;          // Most recent order date
+}
+```
+
+### PurchaseRecord Reference
+
+See `data-model.md` for full definition. Key fields:
+- `productName: string` - Product name at purchase
+- `purchaseDate: Date` - Order completion date
+- `quantity: number` - Units purchased
+- `orderId: string` - Auchan order ID
+- `unitPrice?: number` - Price paid per unit (EUR)
+- `productId?: string` - Auchan SKU
+- `category?: ProductCategory` - Detected category (fresh-produce, dairy, etc.)
+
+### Error Cases
+
+| Error | Cause | Recovery |
+|-------|-------|----------|
+| `AuthenticationError` | Browser not logged into Auchan.pt | Check credentials, re-login |
+| `OrderHistoryNotFound` | Order history page unavailable or structure changed | Check Auchan.pt UI, update selectors |
+| `ParsingError` | Order data extraction failed (unexpected HTML) | Capture screenshot, investigate selector registry |
+| `FileIOError` | Cannot write purchase-history.json | Check file permissions, disk space |
+| `BackupError` | Cannot create backup (backup flag enabled) | Check disk space, use `createBackup: false` |
+| `TimeoutError` | Page load exceeded `pageLoadTimeout` | Increase timeout, check network |
+
+### Side Effects
+
+1. **File System**: Writes/updates `data/memory/household-demo/purchase-history.json`
+   - Merges new records with existing records
+   - Updates `syncStatus` metadata
+   - Creates backup if `createBackup: true` (named `purchase-history.{timestamp}.backup.json`)
+
+2. **Browser**: Navigates to order history page, clicks through orders to extract details
+   - Uses BrowserMCP to interact with Auchan.pt
+   - Does NOT add items to cart or place orders
+   - Does NOT modify user account settings
+
+3. **Performance**: Extraction time is linear in order count
+   - ~500ms per order (page load + parsing)
+   - Full history sync (50 orders) ~25 seconds
+   - Incremental sync (5 new orders) ~2.5 seconds
+
+### Example Usage
+
+```typescript
+// Full sync (extract all orders)
+const result = await syncPurchaseHistory(page);
+if (result.success) {
+  console.log(`Added ${result.newRecordsAdded} records`);
+  console.log(`History now covers ${result.dateRange?.oldest} to ${result.dateRange?.newest}`);
+}
+
+// Incremental sync (orders since last sync)
+const history = await readJSON('data/memory/household-demo/purchase-history.json');
+const result = await syncPurchaseHistory(page, history.syncStatus.lastSyncTimestamp, {
+  maxOrders: 10,
+  createBackup: true
+});
+
+// Handle errors
+if (!result.success) {
+  logger.error(`Sync failed: ${result.error?.message}`);
+  // Fallback: use existing purchase history
+  const existingHistory = await readJSON('data/memory/household-demo/purchase-history.json');
+}
+```
+
+---
+
+## 2. pruneCart()
+
+**Purpose**: Main orchestration function - coordinates sync → scan → decide → remove → report workflow
+
+**Category**: Orchestration Function (Stateful Agent)
+
+### Signature
+
+```typescript
+async function pruneCart(
+  context: PruneCartContext,
+  config?: PruneCartConfig
+): Promise<PruneCartResult>
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `context` | `PruneCartContext` | Yes | Execution context with page, logger, session info |
+| `config` | `PruneCartConfig` | No | Pruning behavior configuration |
+
+### PruneCartContext
+
+```typescript
+interface PruneCartContext {
+  // Active Playwright page (must be on Auchan.pt with authenticated session)
+  page: Page;
+
+  // Logger instance for structured logging
+  logger: Logger;
+
+  // Unique session identifier (for audit trail)
+  sessionId: string;
+
+  // Optional: household directory path (default: 'data/memory/household-demo')
+  householdPath?: string;
+
+  // Optional: whether to create audit screenshots (default: true)
+  captureScreenshots?: boolean;
+}
+```
+
+### PruneCartConfig
+
+```typescript
+interface PruneCartConfig {
+  // Whether to sync purchase history before pruning (default: true)
+  // Set false to skip sync (use existing history)
+  shouldSyncHistory?: boolean;
+
+  // Max orders to extract when syncing (default: 50)
+  maxOrdersToSync?: number;
+
+  // Min confidence for AUTO_REMOVE decision (default: 0.8)
+  // Items below this threshold go to REVIEW bucket
+  minRemoveConfidence?: number;
+
+  // Whether to apply LLM enhancement (default: true if ANTHROPIC_API_KEY set)
+  useLLMEnhancement?: boolean;
+
+  // Max items to LLM-enhance per run (default: 20)
+  // If cart has many uncertain items, only enhance top N
+  maxLLMEnhancements?: number;
+
+  // Whether to execute AUTO_REMOVE decisions immediately (default: true)
+  // Set false for dry-run (generate report without removing)
+  autoRemoveEnabled?: boolean;
+
+  // Which decisions to report as "review required" (default: [REVIEW])
+  reportReviewThresholds?: Array<'REVIEW' | 'AUTO_REMOVE'>;
+}
+```
+
+### Return Type
+
+```typescript
+interface PruneCartResult {
+  // Whether pruning completed successfully
+  success: boolean;
+
+  // Complete pruning report (see data-model.md)
+  report: PruningReport;
+
+  // Summary statistics
+  summary: {
+    // Initial cart item count before pruning
+    initialItemCount: number;
+
+    // Final cart item count after removals
+    finalItemCount: number;
+
+    // Items removed (AUTO_REMOVE executed)
+    autoRemovedCount: number;
+
+    // Items needing user review (REVIEW decision)
+    reviewRequiredCount: number;
+
+    // Items kept in cart
+    keptCount: number;
+
+    // Average confidence across all decisions
+    averageConfidence: number;
+
+    // Sync stats
+    syncStats?: {
+      ordersProcessed: number;
+      recordsAdded: number;
+      durationMs: number;
+    };
+  };
+
+  // Output file path (where report was saved)
+  reportPath: string;
+
+  // Warnings encountered during execution
+  warnings: string[];
+
+  // Error details if pruning failed
+  error?: Error;
+}
+```
+
+### PruningReport Reference
+
+See `data-model.md` for full definition. Key fields:
+- `timestamp: Date` - When pruning was executed
+- `initialCartCount: number` - Cart size before pruning
+- `finalCartCount: number` - Cart size after removals
+- `autoRemoved: PruneDecision[]` - Items removed with high confidence
+- `reviewRequired: PruneDecision[]` - Items needing user decision
+- `kept: PruneDecision[]` - Items kept in cart
+- `syncStatus: PurchaseHistorySyncStatus` - Purchase history metadata
+
+### Execution Flow
+
+```
+1. [Sync Phase]
+   - Call syncPurchaseHistory() if shouldSyncHistory=true
+   - Load existing history if sync skipped
+   - Create sync status metadata
+
+2. [Scan Phase]
+   - Call scanCartTool.execute(page) via BrowserMCP
+   - Extract all items currently in cart
+   - Validate cart snapshot
+
+3. [Decide Phase]
+   - Process cart items through heuristics
+   - Apply LLM enhancement if useLLMEnhancement=true
+   - Classify decisions (KEEP, REVIEW, AUTO_REMOVE)
+
+4. [Execute Phase]
+   - If autoRemoveEnabled=true:
+     - For each AUTO_REMOVE decision:
+       - Call removeCartItems(page, decision.productName)
+       - Capture screenshot (if captureScreenshots=true)
+       - Verify removal
+   - If autoRemoveEnabled=false:
+     - Skip execution, report as dry-run
+
+5. [Report Phase]
+   - Generate PruningReport with all decisions
+   - Save report to runs/{timestamp}/pruning-report.json
+   - Return summary statistics
+```
+
+### Error Cases
+
+| Error | Cause | Recovery |
+|-------|-------|----------|
+| `NotAuthenticatedError` | Page not logged into Auchan.pt | Re-authenticate, retry |
+| `CartNotFoundError` | Cart page unavailable | Navigate to cart, retry |
+| `SyncFailedError` | Purchase history sync failed (but sync was requested) | If `shouldSyncHistory=true`, falls back to existing history |
+| `EmptyCartError` | Cart contains 0 items | Return early with empty report |
+| `RemovalFailedError` | Could not remove item from cart | Log failure, continue with other items |
+| `FileIOError` | Cannot save pruning report | Check disk space, permissions |
+| `LLMError` | LLM enhancement failed (if enabled) | Fallback to heuristics-only decisions |
+
+### Side Effects
+
+1. **File System**:
+   - Calls `syncPurchaseHistory()` (writes purchase-history.json)
+   - Creates `runs/{ISO-timestamp}/pruning-report.json`
+   - Creates backup of purchase-history.json (if sync occurred)
+
+2. **Browser**:
+   - Navigates to cart page
+   - If `autoRemoveEnabled=true`: clicks remove buttons for AUTO_REMOVE items
+   - Captures screenshots (if `captureScreenshots=true`)
+   - Does NOT place orders, modify quantities, or change user settings
+
+3. **Network** (if LLM enabled):
+   - Makes 1-N API calls to Anthropic Claude API
+   - ~100ms per item (rate-limited)
+
+### Example Usage
+
+```typescript
+// Standard pruning with defaults
+const result = await pruneCart({
+  page,
+  logger,
+  sessionId: 'session-' + Date.now()
+});
+
+if (result.success) {
+  console.log(`Removed ${result.summary.autoRemovedCount} items`);
+  console.log(`Report saved to ${result.reportPath}`);
+}
+
+// Dry-run (no actual removals)
+const dryRun = await pruneCart(
+  { page, logger, sessionId },
+  { autoRemoveEnabled: false }
+);
+console.log(`Would remove ${dryRun.summary.autoRemovedCount} items`);
+
+// Skip sync, use existing history
+const result = await pruneCart(
+  { page, logger, sessionId },
+  { shouldSyncHistory: false }
+);
+
+// Disable LLM, use heuristics only
+const result = await pruneCart(
+  { page, logger, sessionId },
+  { useLLMEnhancement: false }
+);
+```
+
+---
+
+## 3. removeCartItems()
+
+**Purpose**: Remove items from cart via BrowserMCP interaction
+
+**Category**: Browser Automation Tool (Atomic Action)
+
+### Signature
+
+```typescript
+async function removeCartItems(
+  page: Page,
+  itemsToRemove: RemoveItemsInput[],
+  options?: RemoveItemsOptions
+): Promise<RemoveItemsResult>
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `page` | `Page` (Playwright) | Yes | Active browser page on Auchan.pt cart page |
+| `itemsToRemove` | `RemoveItemsInput[]` | Yes | Array of items to remove (see below) |
+| `options` | `RemoveItemsOptions` | No | Behavior configuration |
+
+### RemoveItemsInput
+
+```typescript
+interface RemoveItemsInput {
+  // Product name as displayed in cart (e.g., "Tomate Cherry:250 g")
+  // Used for matching rows in cart table
+  productName: string;
+
+  // Optional: Product ID (SKU) for fallback matching
+  // If provided, used to validate correct row selected
+  productId?: string;
+
+  // Optional: Quantity to remove (default: all)
+  // If specified, sets quantity to 0 instead of deleting row
+  quantityToRemove?: number;
+}
+```
+
+### RemoveItemsOptions
+
+```typescript
+interface RemoveItemsOptions {
+  // Max milliseconds to wait for removal confirmation (default: 5000)
+  removalTimeoutMs?: number;
+
+  // Whether to capture screenshot before/after each removal (default: false)
+  // Useful for debugging failed removals
+  captureScreenshots?: boolean;
+
+  // Continue removing other items even if one fails (default: true)
+  // Set false to stop at first error
+  continueOnError?: boolean;
+
+  // Delay between removals in milliseconds (default: 500)
+  // Avoids overwhelming browser with rapid clicks
+  delayBetweenRemovals?: number;
+}
+```
+
+### Return Type
+
+```typescript
+interface RemoveItemsResult {
+  // Whether all removals completed (true if ALL succeeded or continueOnError=true)
+  success: boolean;
+
+  // Number of items successfully removed
+  successCount: number;
+
+  // Details of each removal attempt
+  results: {
+    // Product name from RemoveItemsInput
+    productName: string;
+
+    // Whether this item was successfully removed
+    removed: boolean;
+
+    // Error details if removal failed
+    error?: {
+      code: 'NOT_FOUND' | 'CLICK_FAILED' | 'VERIFICATION_FAILED' | 'TIMEOUT' | 'UNKNOWN';
+      message: string;
+    };
+
+    // Cart count after this removal (for validation)
+    cartCountAfter?: number;
+  }[];
+
+  // Final cart item count after all removals
+  finalCartCount?: number;
+
+  // Screenshots captured (if captureScreenshots=true)
+  screenshots?: {
+    productName: string;
+    before: string;  // File path
+    after: string;   // File path
+  }[];
+
+  // Warnings (e.g., items not found but continued)
+  warnings: string[];
+
+  // Error details if operation failed fatally
+  error?: Error;
+}
+```
+
+### Error Cases
+
+| Error | Cause | Recovery |
+|-------|-------|----------|
+| `NOT_FOUND` | Item row not found in cart | Check product name matches display text, use productId for fallback |
+| `CLICK_FAILED` | Remove button click didn't work | Retry, check for modals, use screenshot to debug |
+| `VERIFICATION_FAILED` | Removal didn't reduce cart count | Possible duplicate items, retry |
+| `TIMEOUT` | Removal confirmation didn't arrive in time | Increase `removalTimeoutMs` |
+| `UNKNOWN` | Unexpected error during removal | Check browser logs, capture screenshot |
+| `AuthenticationError` | Session lost during removal | Re-authenticate, restart pruning |
+
+### Side Effects
+
+1. **Browser State**:
+   - Clicks remove buttons on cart items
+   - Waits for cart to update (visual confirmation)
+   - Does NOT modify quantities (unless `quantityToRemove` specified)
+
+2. **Cart State**:
+   - Reduces item count by 1 per successful removal
+   - Changes visible price/subtotal
+   - May trigger "cart updated" notifications
+
+3. **Logging**:
+   - Logs each removal attempt with success/failure
+   - If `captureScreenshots=true`: creates before/after screenshots
+
+### Important Notes
+
+- **Atomic Calls**: Each `removeCartItems()` call should handle a single item or tightly-related batch
+- **Pagination**: If cart has 100+ items, may span multiple pages - function handles pagination
+- **Duplicate Items**: If same product appears twice, first match is removed
+- **Network Latency**: Cart update may take 100-500ms; function waits with polling
+
+### Example Usage
+
+```typescript
+// Remove single item
+const result = await removeCartItems(page, [
+  { productName: "Shower Gel:500ml" }
+]);
+
+if (result.success && result.results[0].removed) {
+  console.log(`Removed successfully. Cart now has ${result.finalCartCount} items`);
+}
+
+// Remove multiple items with screenshots for debugging
+const result = await removeCartItems(page, [
+  { productName: "Olive Oil:1L", productId: "AUC123456" },
+  { productName: "Shower Gel:500ml", productId: "AUC789012" }
+], {
+  captureScreenshots: true,
+  delayBetweenRemovals: 1000
+});
+
+// Continue removing even if some fail
+const result = await removeCartItems(page, itemsToRemove, {
+  continueOnError: true
+});
+
+const removed = result.results.filter(r => r.removed).length;
+const failed = result.results.filter(r => !r.removed).length;
+console.log(`Removed ${removed}, failed ${failed}`);
+```
+
+---
+
+## 4. generatePruningReport()
+
+**Purpose**: Create JSON report from pruning decisions with metadata and summary
+
+**Category**: Report Generation (Pure Function)
+
+### Signature
+
+```typescript
+function generatePruningReport(
+  input: GenerateReportInput
+): PruningReport
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `input` | `GenerateReportInput` | Yes | All data needed to generate report |
+
+### GenerateReportInput
+
+```typescript
+interface GenerateReportInput {
+  // When pruning was executed
+  timestamp?: Date;  // Defaults to current time
+
+  // Initial cart state before pruning
+  initialCartCount: number;
+
+  // Final cart state after removals
+  finalCartCount: number;
+
+  // All pruning decisions (from heuristics + LLM)
+  decisions: PruneDecision[];
+
+  // Purchase history metadata
+  syncStatus: PurchaseHistorySyncStatus;
+
+  // Optional: Pre-classified decisions (for efficiency)
+  // If provided, these buckets are used; if not, derived from decisions
+  preClassified?: {
+    autoRemoved?: PruneDecision[];
+    reviewRequired?: PruneDecision[];
+    kept?: PruneDecision[];
+  };
+}
+```
+
+### PruneDecision Reference
+
+See `data-model.md` for full definition. Key fields:
+- `productName: string` - Product being evaluated
+- `prune: boolean` - Whether item should be removed
+- `confidence: number` - Heuristic confidence (0-1)
+- `decision: 'KEEP' | 'REVIEW' | 'AUTO_REMOVE'` - Final classification
+- `reason: string` - Human-readable explanation
+- `context: object` - Heuristic context (cadence, urgency, etc.)
+- `wasLLMEnhanced: boolean` - Whether LLM validated this
+- `llmReasoning?: string` - LLM explanation (if enhanced)
+
+### Return Type
+
+```typescript
+interface PruningReport {
+  // ISO timestamp when pruning was executed
+  timestamp: Date;
+
+  // Number of items in cart before pruning
+  initialCartCount: number;
+
+  // Number of items in cart after AUTO_REMOVE executions
+  finalCartCount: number;
+
+  // Items removed with high confidence (decision=AUTO_REMOVE)
+  autoRemoved: PruneDecision[];
+
+  // Items needing user review (decision=REVIEW)
+  reviewRequired: PruneDecision[];
+
+  // Items kept in cart (decision=KEEP)
+  kept: PruneDecision[];
+
+  // Purchase history sync metadata
+  syncStatus: PurchaseHistorySyncStatus;
+}
+```
+
+### Validation Rules
+
+- **Decision Classification**:
+  - Items with `confidence >= 0.8` → `AUTO_REMOVE`
+  - Items with `0.6 <= confidence < 0.8` → `REVIEW`
+  - Items with `confidence < 0.6` → `KEEP`
+  - (Rules apply AFTER LLM enhancement if `wasLLMEnhanced=true`)
+
+- **Cart Count Balance**:
+  - `finalCartCount = initialCartCount - autoRemoved.length - <user-removed-items>`
+  - (Assumes only AUTO_REMOVE and user decisions removed items)
+
+- **Required Fields**:
+  - `timestamp`: Must be valid Date
+  - `initialCartCount`, `finalCartCount`: Must be >= 0
+  - `decisions`: Must not be null/undefined
+
+### Side Effects
+
+None. Pure function - no I/O, no browser interaction, no file writes.
+
+### Example Usage
+
+```typescript
+import { generatePruningReport } from './src/agents/stock-pruner/reporting.js';
+
+// Generate report from decisions
+const report = generatePruningReport({
+  initialCartCount: 77,
+  finalCartCount: 45,
+  decisions: allPruneDecisions,
+  syncStatus: {
+    lastSyncTimestamp: new Date(),
+    ordersCaptured: 47,
+    recordCount: 2147,
+    lastOrderDate: new Date('2026-01-15')
+  }
+});
+
+console.log(`Report generated: ${report.autoRemoved.length} auto-removed, ` +
+            `${report.reviewRequired.length} need review`);
+
+// With pre-classified decisions (optimization)
+const report = generatePruningReport({
+  initialCartCount: 77,
+  finalCartCount: 45,
+  decisions: allPruneDecisions,
+  syncStatus: syncStatus,
+  preClassified: {
+    autoRemoved: [...],
+    reviewRequired: [...],
+    kept: [...]
+  }
+});
+
+// Save report to file
+const fs = await import('fs/promises');
+await fs.writeFile(
+  `runs/${report.timestamp.toISOString()}/pruning-report.json`,
+  JSON.stringify(report, null, 2)
+);
+```
+
+---
+
+## Integration Patterns
+
+### Pattern 1: Full Pruning Session
+
+```typescript
+// Orchestration function (pruneCart) calls all other functions internally:
+//
+// 1. syncPurchaseHistory(page)  → new PurchaseRecord[]
+// 2. scanCartTool.execute(page) → CartSnapshot
+// 3. processCartItems()         → PruneDecision[] (heuristics)
+// 4. removeCartItems(page, [...]) → RemoveItemsResult
+// 5. generatePruningReport(...) → PruningReport
+
+const result = await pruneCart(context, config);
+```
+
+### Pattern 2: Manual Orchestration
+
+```typescript
+// Manual control over each step:
+const syncResult = await syncPurchaseHistory(page);
+const history = syncResult.newRecords;
+
+const cartSnapshot = await scanCartTool.execute(page);
+
+const decisions = processCartItems(cartSnapshot.items, history, config);
+
+const removeResult = await removeCartItems(page, decisions.filter(d => d.prune));
+
+const report = generatePruningReport({
+  initialCartCount: cartSnapshot.itemCount,
+  finalCartCount: removeResult.finalCartCount,
+  decisions,
+  syncStatus: syncResult.syncStatus
+});
+```
+
+### Pattern 3: Dry-Run (No Removals)
+
+```typescript
+// Generate report without removing items:
+const syncResult = await syncPurchaseHistory(page);
+const cartSnapshot = await scanCartTool.execute(page);
+const decisions = processCartItems(cartSnapshot.items, syncResult.newRecords, config);
+
+const report = generatePruningReport({
+  initialCartCount: cartSnapshot.itemCount,
+  finalCartCount: cartSnapshot.itemCount,  // No changes
+  decisions,
+  syncStatus: syncResult.syncStatus
+});
+
+// Report shows what WOULD be removed without actually removing
+```
+
+---
+
+## Error Handling Hierarchy
+
+```
+PruneCart [Orchestrator]
+├── SyncPurchaseHistory
+│   ├── AuthenticationError → Re-login, retry
+│   ├── OrderHistoryNotFound → Check selectors, update registry
+│   └── FileIOError → Check permissions, fallback to existing history
+├── RemoveCartItems
+│   ├── NOT_FOUND → Log warning, skip item
+│   ├── CLICK_FAILED → Retry with screenshot
+│   └── TIMEOUT → Increase timeout, retry
+└── GenerateReport
+    └── Invalid decisions → Reject with validation error
+
+Recovery Strategy:
+- Sync failures: Continue with existing history
+- Removal failures: Log and skip (continueOnError=true)
+- Report generation: Strict validation - fail fast
+```
+
+---
+
+## Type Imports
+
+All types used in this document are defined in:
+
+```
+From data-model.md:
+- CartItem
+- PurchaseRecord
+- PurchaseHistorySyncStatus
+- PruneDecision
+- PruningReport
+- ProductCategory
+
+From src/agents/cart-builder/types.ts:
+- CartSnapshot
+
+From src/agents/stock-pruner/types.ts:
+- StockPrunerConfig
+- StockPruneReport (legacy - being replaced by PruningReport)
+```
+
+---
+
+## File Locations
+
+**Functions implemented in:**
+- `src/agents/stock-pruner/sync.ts` → `syncPurchaseHistory()`
+- `src/agents/stock-pruner/orchestration.ts` → `pruneCart()`
+- `src/tools/cart/remove-items.ts` → `removeCartItems()`
+- `src/agents/stock-pruner/reporting.ts` → `generatePruningReport()`
+
+**Data persisted to:**
+- `data/memory/household-demo/purchase-history.json` → PurchaseRecord[] + PurchaseHistorySyncStatus
+- `runs/{ISO-timestamp}/pruning-report.json` → PruningReport
+
+**Selector registry (for BrowserMCP):**
+- `data/selectors/pages/order-history/v1.json` → Order history page selectors
+- `data/selectors/pages/cart/v1.json` → Cart page selectors
+
+---
+
+**Last Updated**: 2026-01-19
+**Specification Version**: 1.0
+**Status**: Complete

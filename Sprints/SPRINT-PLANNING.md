@@ -191,7 +191,8 @@ Playwright-based browser automation tools:
 | Feature | Points | Priority | Status | Spec | Plan | Tasks |
 |---------|--------|----------|--------|------|------|-------|
 | 001-extension-merge-orders | 15 | P3 | **Abandoned** | [spec.md](Specs/001-extension-merge-orders/spec.md) | - | - |
-| 002-browsermcp-cart-merge | 21 | P1 | **Tasks Ready** | [spec.md](Specs/002-browsermcp-cart-merge/spec.md) | [plan.md](Specs/002-browsermcp-cart-merge/plan.md) | [tasks.md](Specs/002-browsermcp-cart-merge/tasks.md) |
+| 002-browsermcp-cart-merge | 21 | P1 | **Complete** | [spec.md](Specs/002-browsermcp-cart-merge/spec.md) | [plan.md](Specs/002-browsermcp-cart-merge/plan.md) | [tasks.md](Specs/002-browsermcp-cart-merge/tasks.md) |
+| 003-browsermcp-stock-pruning | 26 | P1 | **Tasks Ready** | [spec.md](Specs/003-browsermcp-stock-pruning/spec.md) | [plan.md](Specs/003-browsermcp-stock-pruning/plan.md) | [tasks.md](Specs/003-browsermcp-stock-pruning/tasks.md) |
 
 ### 001-extension-merge-orders (ABANDONED)
 
@@ -238,7 +239,51 @@ Playwright-based browser automation tools:
 1. ~~Review spec.md for accuracy~~ Complete
 2. ~~Run `/speckit-plan 002-browsermcp-cart-merge`~~ Complete
 3. ~~Run `/speckit-tasks 002-browsermcp-cart-merge`~~ Complete (15 tasks generated)
-4. Run `/sprint-new BrowserMCP I 001` to create sprint for implementation
+4. ~~Run `/sprint-new BrowserMCP I 001`~~ Complete (Sprint BrowserMCP-I-001 finished 2026-01-18)
+
+---
+
+### 003-browsermcp-stock-pruning: Intelligent Cart Pruning via BrowserMCP
+
+**Description**: Connects existing StockPruner heuristics to BrowserMCP workflow, enabling intelligent cart refinement by removing recently-purchased items that don't need reordering yet.
+
+**Context**:
+- **What exists**: StockPruner heuristics (1,223 lines), purchase history JSON (2000+ records), BrowserMCP cart merge complete
+- **The gap**: Pruning logic can't run without cart extraction, item matching, and removal execution via BrowserMCP
+- **User value**: Avoid reordering shower gel bought 8 days ago, vitamins bought 12 days ago, etc.
+
+**User Stories**:
+- US1: Prune recently-purchased items from cart (P1) - 11 points
+- US2: Keep purchase history current (P1) - 8 points
+- US3: LLM validation of ALL pruning decisions (P1) - 7 points
+
+**Total**: 26 points
+
+**Sprint Allocation**: 2 sprints recommended
+- Sprint 1: Cart extraction, purchase history sync, basic pruning, LLM integration (US1 + US2 + US3 core - 15 points)
+- Sprint 2: JSON report generation, error handling, refinement, testing (polish - 11 points)
+
+**Key Features**:
+- Incremental purchase history sync before each prune (only new orders)
+- Heuristics generate baseline prune/keep decisions
+- **LLM validates ALL prune decisions** (catches seasonality, bundles, trends, life events)
+- LLM can override heuristics with stronger contextual reasoning
+- Pluggable LLM layer: Claude Code in dev, llm-enhancer in production
+- JSON report output for uncertain items (user handles via browser/chat interface)
+- Reversible via re-running `/merge-orders`
+
+**Success Criteria**:
+- 77-item merged cart → ~45 items after pruning
+- 95%+ cart extraction accuracy
+- 100% purchase history sync completeness
+- 80%+ heuristic accuracy (user validation)
+- <3 minutes execution time
+
+**Next Steps**:
+1. ~~Review spec.md for accuracy~~ Complete
+2. ~~Run `/speckit-plan 003-browsermcp-stock-pruning`~~ Complete (plan.md, research.md, data-model.md, contracts/api.yaml, quickstart.md, checklists/design.md)
+3. ~~Run `/speckit-tasks 003-browsermcp-stock-pruning`~~ Complete (20 tasks generated, 24 story points)
+4. Run `/sprint-new StockPruner I 001` to create first sprint (Tasks T001-T014, 13 points)
 
 ---
 

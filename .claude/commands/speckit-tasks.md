@@ -58,58 +58,214 @@ From contracts/:
 
 Use template: `templates/speckit/tasks-template.md`
 
-#### Task Format
+#### Task Format Requirements
+
+**Mandatory structure**:
 ```
-- [ ] [TaskID] [P] [Story] Description | file/path
+- [ ] [TaskID] [Optional: P] [Optional: Story] Description with file path
 ```
 
-- `[TaskID]`: T001, T002, etc.
-- `[P]`: Parallel marker (optional)
-- `[Story]`: US1, US2, SETUP, FOUNDATION, POLISH
-- Description with file path
+**Component breakdown**:
+
+1. **[TaskID]**: Sequential identifier
+   - Format: `T001`, `T002`, ... `T999`
+   - Zero-padded 3 digits
+   - Globally unique within feature
+   - No gaps in sequence
+
+2. **[P]**: Parallel execution marker (optional)
+   - Include if task can run in parallel with adjacent tasks
+   - Example: Two independent file creation tasks can be [P]
+   - Omit if task depends on previous task completion
+
+3. **[Story]**: Story label (required for user story phases only)
+   - Format: `[US1]`, `[US2]`, `[US3]`, etc.
+   - Maps to User Story from spec.md
+   - **Setup/Foundation phases**: Omit story label
+   - **User Story phases**: Always include story label
+   - **Polish phase**: Use `[POLISH]` label
+
+4. **Description**: What needs to be done
+   - **Action verb + object**: "Create auth middleware", not "Auth middleware"
+   - **Specific file path**: Include actual file path or directory
+   - **Technology-neutral**: "Write unit tests", not "Write Jest tests"
+   - **One task per file/component**: Don't combine unrelated actions
+
+**Examples of good task format**:
+```markdown
+✅ - [ ] T001 [P] [SETUP] Create project structure | src/, tests/, docs/
+✅ - [ ] T008 [US1] Write unit tests for user registration | tests/unit/auth/register.test.ts
+✅ - [ ] T010 [P] [US1] Implement registration endpoint | src/routes/auth/register.ts
+✅ - [ ] T020 [POLISH] Update API documentation | docs/api.md
+```
+
+**Examples of bad task format**:
+```markdown
+❌ - [ ] T001 Project setup (missing file path, vague description)
+❌ - [ ] T008 [US1] Tests (missing specific file path, too vague)
+❌ - [ ] T010 [SETUP] [US1] Create endpoint | src/ (mixing SETUP with US1)
+❌ - [ ] T020 Documentation (missing POLISH label, no file path)
+❌ - [ ] Write tests and implement feature (two tasks, not one)
+```
 
 ### 4. Phase Organization
 
-**Phase 1: Setup** (T001-T003)
+**Phase structure requirements**:
+
+**Phase 1: Setup** (Initial setup, no story labels)
+- Project structure creation
+- Environment configuration
+- Dependency installation
+- Build system setup
+- No `[US#]` labels - use `[SETUP]` only
+
+**Example**:
 ```markdown
-- [ ] T001 [P] [SETUP] Initialize project structure | src/
-- [ ] T002 [P] [SETUP] Configure environment | .env.example
-- [ ] T003 [SETUP] Install dependencies | package.json
+## Phase 1: Setup
+
+- [ ] T001 [P] [SETUP] Create project directory structure | src/, tests/, docs/
+- [ ] T002 [P] [SETUP] Configure environment variables | .env.example
+- [ ] T003 [SETUP] Install project dependencies | package.json
+- [ ] T004 [SETUP] Configure build system | tsconfig.json, vite.config.ts
 ```
 
-**Phase 2: Foundation** (T004-T007)
+**Phase 2: Foundation** (Foundational blocking prerequisites, no story labels)
+- Data models and types
+- Database setup and migrations
+- Shared utilities and middleware
+- Test infrastructure
+- No `[US#]` labels - use `[FOUNDATION]` only
+
+**Example**:
 ```markdown
-- [ ] T004 [P] [FOUNDATION] Create data models | src/models/
-- [ ] T005 [P] [FOUNDATION] Setup database | migrations/
-- [ ] T006 [P] [FOUNDATION] Configure routes | src/routes/
-- [ ] T007 [FOUNDATION] Setup test fixtures | tests/fixtures/
+## Phase 2: Foundation
+
+- [ ] T005 [P] [FOUNDATION] Define data models | src/models/user.ts
+- [ ] T006 [P] [FOUNDATION] Create database schema | migrations/001_init.sql
+- [ ] T007 [P] [FOUNDATION] Setup authentication middleware | src/middleware/auth.ts
+- [ ] T008 [FOUNDATION] Create test fixtures | tests/fixtures/users.json
 ```
 
-**Phase 3+: User Stories**
-```markdown
-## Phase 3: US1 - [Title]
+**Phases 3+: Individual User Stories** (One phase per user story, priority order)
+- Implement user stories in priority sequence (P1 first)
+- Each story gets own phase
+- ALWAYS: Tests → Implementation → Verification
+- ALL tasks labeled with story: `[US1]`, `[US2]`, etc.
 
-### Tests (Write FIRST)
-- [ ] T008 [US1] Write unit tests | tests/unit/
-- [ ] T009 [US1] Write integration tests | tests/integration/
+**Example**:
+```markdown
+## Phase 3: US1 - User Registration
+
+### Tests (Write FIRST - Article III)
+- [ ] T009 [US1] Write unit tests for registration logic | tests/unit/auth/register.test.ts
+- [ ] T010 [US1] Write integration tests for /register endpoint | tests/integration/auth.test.ts
 
 ### Implementation
-- [ ] T010 [P] [US1] Implement component A | src/
-- [ ] T011 [P] [US1] Implement component B | src/
-- [ ] T012 [US1] Connect components | src/index.ts
+- [ ] T011 [P] [US1] Implement registration service | src/services/auth/register.ts
+- [ ] T012 [P] [US1] Create registration endpoint | src/routes/auth/register.ts
+- [ ] T013 [US1] Connect registration flow | src/controllers/auth.controller.ts
 
 ### Verification
-- [ ] T013 [US1] Run tests - verify pass | npm test
+- [ ] T014 [US1] Run unit tests - verify pass | npm test
+- [ ] T015 [US1] Run integration tests - verify pass | npm run test:integration
+- [ ] T016 [US1] Manual verification of registration flow | Run local server
+
+## Phase 4: US2 - User Login
+
+### Tests (Write FIRST - Article III)
+- [ ] T017 [US2] Write unit tests for login logic | tests/unit/auth/login.test.ts
+- [ ] T018 [US2] Write integration tests for /login endpoint | tests/integration/auth.test.ts
+
+### Implementation
+- [ ] T019 [P] [US2] Implement login service | src/services/auth/login.ts
+- [ ] T020 [P] [US2] Create login endpoint | src/routes/auth/login.ts
+- [ ] T021 [US2] Add session management | src/middleware/session.ts
+
+### Verification
+- [ ] T022 [US2] Run tests - verify pass | npm test
 ```
 
-**Final Phase: Polish**
+**Final Phase: Polish** (Cross-cutting improvements)
+- Documentation updates
+- Performance optimization
+- Error handling improvements
+- Code cleanup
+- All tasks labeled `[POLISH]`
+
+**Example**:
 ```markdown
-- [ ] T020 [P] [POLISH] Update README | README.md
-- [ ] T021 [P] [POLISH] Add documentation | docs/
-- [ ] T022 [POLISH] Final review
+## Phase 5: Polish
+
+- [ ] T023 [P] [POLISH] Update README with setup instructions | README.md
+- [ ] T024 [P] [POLISH] Add API documentation | docs/api.md
+- [ ] T025 [P] [POLISH] Add inline code comments | src/
+- [ ] T026 [POLISH] Final code review and cleanup | All files
 ```
 
-### 4.5. AI Discoverability Tasks (Conditional)
+**Phase ordering rules**:
+1. Setup → Foundation → User Stories → Polish
+2. User Stories ordered by priority (P1 before P2 before P3)
+3. Within user story: Tests before implementation (Article III)
+4. Dependencies must be satisfied (Foundation before US1)
+
+### 4.5. MVP Scope Identification
+
+**Goal**: Identify minimum viable task set for early value delivery
+
+**Strategy**:
+1. **Suggest User Story 1 as MVP**
+   - US1 is typically highest priority (P1)
+   - Setup + Foundation + US1 = Minimum viable product
+   - Can be deployed and validated independently
+
+2. **Calculate MVP task set**
+   ```python
+   mvp_tasks = []
+   mvp_tasks.extend(setup_phase_tasks)      # Phase 1
+   mvp_tasks.extend(foundation_phase_tasks) # Phase 2
+   mvp_tasks.extend(us1_phase_tasks)        # Phase 3
+
+   mvp_task_count = len(mvp_tasks)
+   total_task_count = count_all_tasks()
+
+   print(f"MVP: {mvp_task_count}/{total_task_count} tasks")
+   print(f"Percentage: {(mvp_task_count/total_task_count)*100:.1f}%")
+   ```
+
+3. **Document what can be deferred**
+   - **Deferred to post-MVP**: US2, US3, Polish phase
+   - **Benefit**: Early validation, faster feedback loop
+   - **Risk mitigation**: Can pivot based on US1 validation
+
+**Example MVP documentation**:
+```markdown
+## MVP Scope (Recommended)
+
+**MVP = Setup + Foundation + US1** (Tasks T001-T016)
+
+### Included in MVP:
+- ✅ Phase 1: Setup (T001-T004)
+- ✅ Phase 2: Foundation (T005-T008)
+- ✅ Phase 3: US1 - User Registration (T009-T016)
+
+### Deferred to post-MVP:
+- ⏸️ Phase 4: US2 - User Login (T017-T022)
+- ⏸️ Phase 5: Polish (T023-T026)
+
+### MVP Benefits:
+- **Early validation**: Test core value proposition with US1
+- **Faster feedback**: Deploy in 1 sprint vs. 2 sprints
+- **Reduced risk**: Pivot based on real user feedback
+
+### Deployment Strategy:
+1. Complete MVP tasks (T001-T016)
+2. Deploy to staging
+3. Validate with test users
+4. If successful: Continue with US2
+5. If issues: Fix or pivot based on feedback
+```
+
+### 4.6. AI Discoverability Tasks (Conditional)
 
 **When**: `ai_discoverability.enabled: true` in sprint.config.yaml
 
@@ -216,12 +372,61 @@ For each user story:
 
 ### 6. Dependency Graph
 
-Generate dependency visualization:
+**Purpose**: Visualize task dependencies and identify parallelization opportunities
+
+**When to create**:
+- For complex features (10+ tasks)
+- When multiple parallel execution paths exist
+- To communicate execution order to developers
+
+**How to generate**:
+
+1. **Identify blocking relationships**
+   - Task A blocks Task B if B requires A's output
+   - Example: "Create data model" blocks "Write tests using model"
+
+2. **Mark parallel opportunities**
+   - Tasks with no dependencies can run in parallel
+   - Example: Multiple independent file creation tasks
+
+3. **Create visualization**
+   ```
+   Legend:
+   ─> : Blocking dependency (B depends on A)
+   ─┬─> : Fork (A enables multiple parallel tasks)
+   ─┤ : Join (Multiple tasks must complete before proceeding)
+   [P] : Parallelizable task
+   ```
+
+**Example dependency graph**:
 ```
-T001 ─┬─> T003 ───> T004 ─┬─> T007 ─> T008 ─> T010
-T002 ─┘              T005 ─┤
-                     T006 ─┘
+Setup Phase:
+T001 [P] ─┬─> T004 (T001 creates structure needed by T004)
+T002 [P] ─┤
+T003 [P] ─┘
+
+Foundation Phase:
+T004 ─┬─> T008 (Models needed for tests)
+T005 ─┤ (DB needed for tests)
+T006 ─┤ (Middleware needed for tests)
+T007 ─┘ (Fixtures needed for tests)
+
+User Story Phase:
+T008 ─> T011 (Tests must exist before implementation)
+T009 ─> T012 (Tests must exist before implementation)
+T010 ─> T013 (Tests must exist before implementation)
+
+T011 [P] ─┬─> T014 (All implementations must complete before verification)
+T012 [P] ─┤
+T013 [P] ─┘
 ```
+
+**Interpretation for execution**:
+- **Critical path**: T001 → T004 → T008 → T011 → T014
+- **Parallel opportunities**:
+  - T001, T002, T003 can run simultaneously
+  - T011, T012, T013 can run simultaneously
+- **Execution time**: Critical path determines minimum time
 
 ### 7. Sprint Task Mapping
 
